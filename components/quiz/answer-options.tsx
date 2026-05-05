@@ -30,7 +30,7 @@ export function AnswerOptions({
             onClick={() => onSelectAnswer(option.id)}
             className={cn(
               "group relative flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-all duration-200 md:p-5",
-              "hover:border-primary/40 hover:bg-secondary/50",
+              "hover:border-primary hover:bg-primary/5 shadow-sm hover:shadow-md",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               isSelected
                 ? "border-primary bg-primary/10"

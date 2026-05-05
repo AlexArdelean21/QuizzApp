@@ -23,7 +23,7 @@ export function QuestionCard({
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-accent-foreground">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-sm font-semibold text-primary">
               {questionNumber}
             </span>
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -37,7 +37,7 @@ export function QuestionCard({
             className={cn(
               "transition-colors",
               isBookmarked
-                ? "text-accent hover:text-accent/80"
+                ? "text-primary hover:text-primary/80"
                 : "text-muted-foreground hover:text-foreground"
             )}
             aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
