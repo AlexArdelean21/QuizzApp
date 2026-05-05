@@ -19,7 +19,7 @@ export function QuestionCard({
   onToggleBookmark,
 }: QuestionCardProps) {
   return (
-    <Card className="border-border bg-card">
+    <Card className="w-full border-2 border-border/90 bg-card shadow-xl shadow-primary/10 ring-1 ring-primary/15">
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -49,7 +49,7 @@ export function QuestionCard({
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-lg font-medium leading-relaxed text-foreground md:text-xl text-pretty">
+        <p className="text-pretty text-xl font-medium leading-relaxed text-foreground md:text-2xl lg:text-[1.65rem] lg:leading-snug">
           {questionText}
         </p>
       </CardContent>

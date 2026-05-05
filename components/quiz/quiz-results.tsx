@@ -20,8 +20,8 @@ export function QuizResults({
 }: QuizResultsProps) {
   return (
     <div className="min-h-screen bg-background">
-      <main className="container mx-auto flex max-w-lg flex-col gap-8 px-4 py-16 md:py-24">
-        <Card className="border-border bg-card shadow-sm quiz-question-animate">
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
+        <Card className="w-full max-w-2xl self-center border-2 border-border/90 bg-card shadow-xl shadow-primary/10 ring-1 ring-primary/15 quiz-question-animate">
           <CardHeader className="pb-2">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Rezultate

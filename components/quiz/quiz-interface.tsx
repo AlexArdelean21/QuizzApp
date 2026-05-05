@@ -223,10 +223,10 @@ export function QuizInterface() {
         timeRemaining={formatClock(timeRemaining)}
       />
 
-      <main className="container mx-auto max-w-3xl px-4 py-8 md:py-12">
+      <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
         <div
           key={currentQuestion.id}
-          className="flex flex-col gap-8 quiz-question-animate"
+          className="flex w-full flex-col gap-8 md:gap-10 quiz-question-animate"
         >
           <QuestionCard
             questionNumber={currentIndex + 1}

@@ -20,7 +20,7 @@ export function AnswerOptions({
   onSelectAnswer,
 }: AnswerOptionsProps) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex w-full flex-col gap-3 md:gap-4">
       {options.map((option) => {
         const isSelected = selectedAnswer === option.id
 
@@ -29,7 +29,7 @@ export function AnswerOptions({
             key={option.id}
             onClick={() => onSelectAnswer(option.id)}
             className={cn(
-              "group relative flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-all duration-200 md:p-5",
+              "group relative flex w-full min-w-0 items-center gap-4 rounded-xl border-2 p-5 text-left transition-all duration-200 md:gap-5 md:p-6",
               "hover:border-primary hover:bg-primary/5 shadow-sm hover:shadow-md",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               isSelected
@@ -41,7 +41,7 @@ export function AnswerOptions({
             {/* Option Label Circle */}
             <span
               className={cn(
-                "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-all duration-200",
+                "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-all duration-200 md:size-11 md:text-base",
                 isSelected
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-muted-foreground group-hover:bg-primary/15 group-hover:text-foreground"
@@ -53,7 +53,7 @@ export function AnswerOptions({
             {/* Option Text */}
             <span
               className={cn(
-                "flex-1 text-base font-medium transition-colors duration-200 md:text-lg",
+                "min-w-0 flex-1 text-lg font-medium transition-colors duration-200 md:text-xl",
                 isSelected
                   ? "text-foreground"
                   : "text-muted-foreground group-hover:text-foreground"
