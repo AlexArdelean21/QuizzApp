@@ -90,3 +90,31 @@ body {
 .quiz-question-animate {
   animation: quiz-question-in 0.38s ease-out;
 }
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-backdrop-animate {
+  animation: modal-fade-in 0.18s ease-out;
+}
+
+.modal-card-animate {
+  animation: modal-pop-in 0.22s ease-out;
+}

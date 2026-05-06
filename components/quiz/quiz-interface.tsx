@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
@@ -18,8 +17,6 @@ const DEFAULT_QUESTION_COUNT = 25
 const MIN_PRACTICE_QUESTIONS = 10
 const MAX_PRACTICE_QUESTIONS = 100
 const SIMULATION_PASS_THRESHOLD = 18
-const EXAM_NAME = "Examen"
-
 type QuizMode = "simulation" | "practice"
 type QuizStatus = "setup" | "loading" | "quiz" | "results" | "error"
 
@@ -46,7 +43,6 @@ function formatElapsed(ms: number) {
 }
 
 export function QuizInterface() {
-  const router = useRouter()
   const [status, setStatus] = useState<QuizStatus>("setup")
   const [mode, setMode] = useState<QuizMode>("simulation")
   const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTION_COUNT)
@@ -60,6 +56,7 @@ export function QuizInterface() {
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [timeRemaining, setTimeRemaining] = useState(QUIZ_DURATION_SEC)
   const [resultStats, setResultStats] = useState<ResultStats | null>(null)
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false)
 
   const questionsRef = useRef(questions)
   const answersRef = useRef(answers)
@@ -199,15 +196,40 @@ export function QuizInterface() {
     void loadQuiz(mode, targetCount)
   }
 
-  const handleLogout = async () => {
-    try {
-      const supabase = getSupabaseBrowserClient()
-      await supabase.auth.signOut()
-    } finally {
-      router.replace("/login")
-      router.refresh()
-    }
+  const resetToSetup = () => {
+    finishedRef.current = false
+    setQuestions([])
+    setCurrentIndex(0)
+    setSelectedAnswer(null)
+    setBookmarkedQuestions(new Set())
+    setAnswers({})
+    setTimeRemaining(QUIZ_DURATION_SEC)
+    setResultStats(null)
+    setErrorMessage(null)
+    setStatus("setup")
   }
+
+  const handleExitQuiz = () => {
+    resetToSetup()
+    setIsExitModalOpen(false)
+  }
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("quiz-active-change", { detail: status === "quiz" }))
+  }, [status])
+
+  useEffect(() => {
+    const openExitModal = () => {
+      if (status === "quiz") {
+        setIsExitModalOpen(true)
+      }
+    }
+
+    window.addEventListener("quiz-exit-request", openExitModal)
+    return () => {
+      window.removeEventListener("quiz-exit-request", openExitModal)
+    }
+  }, [status])
 
   if (status === "loading") {
     return (
@@ -351,11 +373,9 @@ export function QuizInterface() {
   return (
     <div className="min-h-screen bg-background">
       <QuizHeader
-        examName={EXAM_NAME}
         currentQuestion={currentIndex + 1}
         totalQuestions={totalQuestions}
         timeRemaining={formatClock(timeRemaining)}
-        onLogout={handleLogout}
       />
 
       <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
@@ -396,6 +416,39 @@ export function QuizInterface() {
           )}
         </div>
       </main>
+
+      {isExitModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 modal-backdrop-animate">
+          <button
+            type="button"
+            aria-label="Închide"
+            onClick={() => setIsExitModalOpen(false)}
+            className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-slate-950/95 p-6 shadow-2xl ring-1 ring-primary/20 modal-card-animate">
+            <h2 className="text-lg font-semibold text-white">Confirmare ieșire</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Ești sigur că vrei să părăsești quiz-ul? Progresul actual va fi pierdut.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsExitModalOpen(false)}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary/90"
+              >
+                Rămân
+              </button>
+              <button
+                type="button"
+                onClick={handleExitQuiz}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-500"
+              >
+                Renunță
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
