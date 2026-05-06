@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
@@ -45,6 +46,7 @@ function formatElapsed(ms: number) {
 }
 
 export function QuizInterface() {
+  const router = useRouter()
   const [status, setStatus] = useState<QuizStatus>("setup")
   const [mode, setMode] = useState<QuizMode>("simulation")
   const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTION_COUNT)
@@ -197,6 +199,16 @@ export function QuizInterface() {
     void loadQuiz(mode, targetCount)
   }
 
+  const handleLogout = async () => {
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await supabase.auth.signOut()
+    } finally {
+      router.replace("/login")
+      router.refresh()
+    }
+  }
+
   if (status === "loading") {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-4">
@@ -343,6 +355,7 @@ export function QuizInterface() {
         currentQuestion={currentIndex + 1}
         totalQuestions={totalQuestions}
         timeRemaining={formatClock(timeRemaining)}
+        onLogout={handleLogout}
       />
 
       <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">

@@ -8,6 +8,7 @@ interface QuizHeaderProps {
   currentQuestion: number
   totalQuestions: number
   timeRemaining: string
+  onLogout?: () => void
 }
 
 export function QuizHeader({
@@ -15,6 +16,7 @@ export function QuizHeader({
   currentQuestion,
   totalQuestions,
   timeRemaining,
+  onLogout,
 }: QuizHeaderProps) {
   const progressValue = (currentQuestion / totalQuestions) * 100
 
@@ -41,12 +43,23 @@ export function QuizHeader({
           </span>
         </div>
 
-        {/* Timer */}
-        <div className="flex shrink-0 items-center gap-2 rounded-lg bg-secondary px-3 py-1.5">
+        {/* Timer + Logout */}
+        <div className="flex shrink-0 items-center gap-2">
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+            >
+              Logout
+            </button>
+          )}
+          <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-1.5">
           <Clock className="size-4 text-muted-foreground" />
           <span className="font-mono text-sm font-medium text-foreground">
             {timeRemaining}
           </span>
+        </div>
         </div>
       </div>
     </header>
