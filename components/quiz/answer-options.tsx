@@ -11,30 +11,48 @@ interface AnswerOption {
 interface AnswerOptionsProps {
   options: AnswerOption[]
   selectedAnswer: string | null
+  correctAnswer: string
+  showImmediateFeedback: boolean
+  isLocked: boolean
   onSelectAnswer: (answerId: string) => void
 }
 
 export function AnswerOptions({
   options,
   selectedAnswer,
+  correctAnswer,
+  showImmediateFeedback,
+  isLocked,
   onSelectAnswer,
 }: AnswerOptionsProps) {
   return (
     <div className="flex w-full flex-col gap-3 md:gap-4">
       {options.map((option) => {
         const isSelected = selectedAnswer === option.id
+        const isCorrectOption = option.id === correctAnswer
+        const isWrongSelected = showImmediateFeedback && isSelected && !isCorrectOption
+        const isCorrectShown =
+          showImmediateFeedback && (isCorrectOption || (isSelected && isCorrectOption))
 
         return (
           <button
             key={option.id}
             onClick={() => onSelectAnswer(option.id)}
+            disabled={isLocked}
             className={cn(
               "group relative flex w-full min-w-0 items-center gap-4 rounded-xl border-2 p-5 text-left transition-all duration-200 md:gap-5 md:p-6",
-              "hover:border-primary hover:bg-primary/5 shadow-sm hover:shadow-md",
+              !isLocked && "hover:border-primary hover:bg-primary/5 shadow-sm hover:shadow-md",
+              isLocked && "cursor-not-allowed",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              isSelected
-                ? "border-primary bg-primary/10"
-                : "border-border bg-card"
+              showImmediateFeedback
+                ? isCorrectShown
+                  ? "border-emerald-500 bg-emerald-500/10"
+                  : isWrongSelected
+                    ? "border-rose-500 bg-rose-500/10"
+                    : "border-border bg-card"
+                : isSelected
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-card"
             )}
             aria-pressed={isSelected}
           >
@@ -42,9 +60,15 @@ export function AnswerOptions({
             <span
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-all duration-200 md:size-11 md:text-base",
-                isSelected
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground group-hover:bg-primary/15 group-hover:text-foreground"
+                showImmediateFeedback
+                  ? isCorrectShown
+                    ? "bg-emerald-500 text-white"
+                    : isWrongSelected
+                      ? "bg-rose-500 text-white"
+                      : "bg-secondary text-muted-foreground"
+                  : isSelected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground group-hover:bg-primary/15 group-hover:text-foreground"
               )}
             >
               {option.label}
@@ -54,9 +78,15 @@ export function AnswerOptions({
             <span
               className={cn(
                 "min-w-0 flex-1 text-lg font-medium transition-colors duration-200 md:text-xl",
-                isSelected
-                  ? "text-foreground"
-                  : "text-muted-foreground group-hover:text-foreground"
+                showImmediateFeedback
+                  ? isCorrectShown
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : isWrongSelected
+                      ? "text-rose-600 dark:text-rose-400"
+                      : "text-muted-foreground"
+                  : isSelected
+                    ? "text-foreground"
+                    : "text-muted-foreground group-hover:text-foreground"
               )}
             >
               {option.text}
@@ -66,14 +96,20 @@ export function AnswerOptions({
             <span
               className={cn(
                 "size-5 rounded-full border-2 transition-all duration-200",
-                isSelected
-                  ? "border-primary bg-primary"
-                  : "border-muted-foreground/30 group-hover:border-primary/50"
+                showImmediateFeedback
+                  ? isCorrectShown
+                    ? "border-emerald-500 bg-emerald-500"
+                    : isWrongSelected
+                      ? "border-rose-500 bg-rose-500"
+                      : "border-muted-foreground/30"
+                  : isSelected
+                    ? "border-primary bg-primary"
+                    : "border-muted-foreground/30 group-hover:border-primary/50"
               )}
             >
-              {isSelected && (
+              {(isCorrectShown || (!showImmediateFeedback && isSelected)) && (
                 <svg
-                  className="size-full text-primary-foreground"
+                  className="size-full text-white"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >

@@ -4,20 +4,27 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 type QuizResultsProps = {
+  mode: "simulation" | "practice"
   correctCount: number
   totalQuestions: number
+  passThreshold?: number
   elapsedLabel: string
   finishedByTimeout: boolean
   onRestart: () => void
 }
 
 export function QuizResults({
+  mode,
   correctCount,
   totalQuestions,
+  passThreshold = 18,
   elapsedLabel,
   finishedByTimeout,
   onRestart,
 }: QuizResultsProps) {
+  const wrongCount = totalQuestions - correctCount
+  const isPassed = correctCount >= passThreshold
+
   return (
     <div className="min-h-screen bg-background">
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
@@ -27,19 +34,42 @@ export function QuizResults({
               Rezultate
             </p>
             <h1 className="text-2xl font-semibold text-foreground md:text-3xl">
-              Ai terminat quiz-ul
+              {mode === "simulation" ? "Rezultatul simulării" : "Rezultatul sesiunii de practică"}
             </h1>
           </CardHeader>
           <CardContent className="flex flex-col gap-6 pt-2">
             <div className="rounded-xl border border-border bg-secondary/40 px-5 py-4">
-              <p className="text-sm text-muted-foreground">Scor final</p>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">
-                {correctCount}
-                <span className="text-lg font-medium text-muted-foreground">
-                  {" "}
-                  / {totalQuestions}
-                </span>
-              </p>
+              {mode === "simulation" ? (
+                <>
+                  <p className="text-sm text-muted-foreground">Scor final</p>
+                  <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">
+                    {correctCount}
+                    <span className="text-lg font-medium text-muted-foreground">
+                      {" "}
+                      / {totalQuestions}
+                    </span>
+                  </p>
+                  <p
+                    className={`mt-3 inline-flex w-fit rounded-lg px-3 py-1 text-sm font-semibold ${
+                      isPassed
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                    }`}
+                  >
+                    {isPassed ? "ADMIS" : "RESPINS"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">Statistici generale</p>
+                  <p className="mt-1 text-xl font-semibold text-foreground">
+                    Corecte: <span className="font-bold text-emerald-600 dark:text-emerald-400">{correctCount}</span>
+                  </p>
+                  <p className="text-xl font-semibold text-foreground">
+                    Greșite: <span className="font-bold text-rose-600 dark:text-rose-400">{wrongCount}</span>
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="flex flex-col gap-1 text-sm">
