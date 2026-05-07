@@ -8,6 +8,7 @@ export type QuizOption = {
 
 export type QuizQuestion = {
   id: string
+  examenId: number
   text: string
   options: QuizOption[]
   correctAnswer: AnswerId
@@ -23,3 +24,5 @@ export type IntrebareRow = {
   varianta_c: string
   raspuns_corect: string
 }
+
+export type PracticeSource = "all" | "bookmarked" | "wrong"
