@@ -23,6 +23,7 @@ const DEFAULT_QUESTION_COUNT = 25
 const MIN_PRACTICE_QUESTIONS = 5
 const MAX_PRACTICE_QUESTIONS = 100
 const SIMULATION_PASS_THRESHOLD = 18
+const EXAM_DISPLAY_NAME = "ANRE grad III-IVAB"
 
 type QuizMode = "simulation" | "practice"
 type QuizStatus = "setup" | "loading" | "quiz" | "results" | "error"
@@ -141,9 +142,11 @@ export function QuizInterface() {
   useEffect(() => {
     if (!isPracticeMode) return
     const dynamicMax = Math.max(0, Math.min(MAX_PRACTICE_QUESTIONS, availablePracticeCount))
-    if (dynamicMax === 0) return setQuestionCount(0)
-    const fallback = Math.min(dynamicMax, MIN_PRACTICE_QUESTIONS)
-    setQuestionCount((prev) => (prev <= 0 ? fallback : Math.min(prev, dynamicMax)))
+    if (dynamicMax === 0) {
+      setQuestionCount(0)
+      return
+    }
+    setQuestionCount(Math.min(DEFAULT_QUESTION_COUNT, dynamicMax))
   }, [isPracticeMode, availablePracticeCount])
 
   const loadQuiz = useCallback(async (selectedMode: QuizMode, selectedCount: number, examenId: number, source: PracticeSource, currentUserId: string | null) => {
@@ -280,7 +283,10 @@ export function QuizInterface() {
   }
 
   if (status === "setup") {
-    const dynamicMax = Math.max(1, Math.min(MAX_PRACTICE_QUESTIONS, availablePracticeCount))
+    const dynamicMax = Math.max(0, Math.min(MAX_PRACTICE_QUESTIONS, availablePracticeCount))
+    const sliderMax = Math.max(1, dynamicMax)
+    const sliderValue = Math.max(1, Math.min(questionCount, sliderMax))
+    const hasSingleExamOption = examOptions.length <= 1
     return (
       <div className="min-h-screen bg-background">
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
@@ -292,11 +298,33 @@ export function QuizInterface() {
             <CardContent className="flex flex-col gap-6 pt-2">
               <div className="rounded-xl border border-border bg-secondary/30 p-5">
                 <label htmlFor="exam-id" className="text-sm font-medium text-foreground">Examen</label>
-                <select id="exam-id" value={selectedExamId} onChange={(e) => setSelectedExamId(Number(e.target.value))} className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground outline-none">
-                  {examOptions.map((examId) => (
-                    <option key={examId} value={examId}>Examen #{examId}</option>
-                  ))}
-                </select>
+                {hasSingleExamOption ? (
+                  <p className="mt-2 rounded-lg border border-border/70 bg-card/60 px-3 py-2 text-sm text-muted-foreground">
+                    {EXAM_DISPLAY_NAME}
+                  </p>
+                ) : (
+                  <div className="relative mt-2">
+                    <select
+                      id="exam-id"
+                      value={selectedExamId}
+                      onChange={(e) => setSelectedExamId(Number(e.target.value))}
+                      className="w-full appearance-none rounded-lg border border-border bg-card px-4 py-2.5 pr-10 text-sm text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                    >
+                      {examOptions.map((examId) => (
+                        <option key={examId} value={examId}>
+                          {EXAM_DISPLAY_NAME} (ID {examId})
+                        </option>
+                      ))}
+                    </select>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 20 20"
+                      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    >
+                      <path d="m5 7 5 6 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                )}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <button type="button" data-testid="quiz-mode-simulation" onClick={() => setMode("simulation")} className={`rounded-xl border-2 p-5 text-left transition ${mode === "simulation" ? "border-primary bg-primary/10" : "border-border bg-secondary/30 hover:border-primary/40"}`}>
@@ -309,12 +337,27 @@ export function QuizInterface() {
               {mode === "practice" && (
                 <div className="rounded-xl border border-border bg-secondary/30 p-5">
                   <label htmlFor="practice-source" className="text-sm font-medium text-foreground">Sursă întrebări</label>
-                  <select id="practice-source" value={practiceSource} onChange={(e) => setPracticeSource(e.target.value as PracticeSource)} className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground outline-none">
-                    <option value="all">Toate</option>
-                    <option value="bookmarked">Salvate</option>
-                    <option value="wrong">Greșite anterior</option>
-                  </select>
-                  <input type="range" min={1} max={dynamicMax} value={Math.max(1, questionCount)} onChange={(e) => setQuestionCount(Number(e.target.value))} className="mt-4 w-full accent-primary" disabled={availablePracticeCount === 0 || isAvailabilityLoading} />
+                  <div className="relative mt-2">
+                    <select
+                      id="practice-source"
+                      value={practiceSource}
+                      onChange={(e) => setPracticeSource(e.target.value as PracticeSource)}
+                      className="w-full appearance-none rounded-lg border border-border bg-card px-4 py-2.5 pr-10 text-sm text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                    >
+                      <option value="all">Toate</option>
+                      <option value="bookmarked">Salvate</option>
+                      <option value="wrong">Greșite anterior</option>
+                    </select>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 20 20"
+                      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    >
+                      <path d="m5 7 5 6 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-foreground">Număr întrebări: {dynamicMax === 0 ? 0 : sliderValue}</p>
+                  <input type="range" min={1} max={sliderMax} value={dynamicMax === 0 ? 1 : sliderValue} onChange={(e) => setQuestionCount(Number(e.target.value))} className="mt-2 w-full accent-primary" disabled={availablePracticeCount === 0 || isAvailabilityLoading} />
                   <p className="mt-2 text-xs text-muted-foreground">Disponibile: {availablePracticeCount} întrebări</p>
                   {availabilityMessage && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">{availabilityMessage}</p>}
                 </div>
