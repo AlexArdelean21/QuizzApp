@@ -1,5 +1,6 @@
 import { cookies } from "next/headers"
-import { createServerClient, type CookieOptions } from "@supabase/ssr"
+import { createServerClient } from "@supabase/ssr"
+import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
 
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies()
@@ -13,18 +14,21 @@ export async function createSupabaseServerClient() {
   }
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return cookieStore.getAll()
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet, headers) {
         try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options as CookieOptions)
+          cookiesToSet.forEach(({ name, value }) => {
+            cookieStore.set(name, value, SUPABASE_COOKIE_OPTIONS)
           })
         } catch {
-          // In Server Components, set poate eșua; middleware va reîmprospăta cookie-urile.
+          // In Server Components cookies().set() throws; middleware handles refresh.
         }
+        // headers (Cache-Control etc.) cannot be set from Server Components.
+        void headers
       },
     },
   })

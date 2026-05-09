@@ -1,5 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
 
 let browserClient: SupabaseClient | null = null
 
@@ -15,6 +16,11 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     )
   }
 
-  browserClient = createBrowserClient(url, anonKey)
+  // Explicit cookieOptions keeps the browser client's cookie attributes
+  // in sync with the server client, so both use the same secure/sameSite
+  // settings regardless of environment.
+  browserClient = createBrowserClient(url, anonKey, {
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
+  })
   return browserClient
 }

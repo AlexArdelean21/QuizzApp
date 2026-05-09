@@ -88,19 +88,46 @@ export default function LoginPage() {
 
     setIsSubmitting(true)
     try {
-      const supabase = getSupabaseBrowserClient()
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback?next=/login`
-          : undefined
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
+      // Server-side initiation: resetPasswordForEmail runs in a Route Handler so
+      // the PKCE code verifier is stored via Set-Cookie (HTTP header) rather than
+      // document.cookie (JS). This survives email-client redirect chains and
+      // strict browser cookie settings that can silently swallow JS cookie writes.
+      // credentials:'include' ensures the browser processes Set-Cookie headers
+      // from this same-origin response and stores the PKCE verifier cookie.
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
       })
 
-      if (error) {
-        setErrorMessage(error.message)
+      const data = await res.json()
+
+      if (!res.ok) {
+        setErrorMessage(data.error ?? "Nu s-a putut trimite email-ul.")
         return
       }
+
+      // ── Diagnostics ────────────────────────────────────────────────────────
+      // Check whether the verifier cookie was stored by the browser.
+      // If code-verifier is NOT visible here, the Set-Cookie was either
+      // blocked by the browser or the cookie was set HttpOnly (which is fine —
+      // HttpOnly cookies ARE sent to the server even if JS can't read them).
+      // Also check for sb-diag-test from a previous failed callback run.
+      if (typeof document !== "undefined") {
+        const parts = document.cookie.split(";").map((c) => c.trim())
+        const names = parts.map((c) => c.split("=")[0])
+        const hasVerifier = names.some((n) => n.includes("code-verifier"))
+        const hasDiagTest = names.some((n) => n === "sb-diag-test")
+        console.log("[reset-password] All JS-visible cookie names:", names)
+        console.log("[reset-password] code-verifier visible to JS:", hasVerifier)
+        console.log(
+          "[reset-password] sb-diag-test present (from prev callback):",
+          hasDiagTest,
+          "— if true, cookies DO survive the Supabase redirect, so the verifier was missing before the callback ran"
+        )
+      }
+      // ───────────────────────────────────────────────────────────────────────
 
       setMessage("Am trimis email-ul pentru resetarea parolei.")
     } catch (error) {
