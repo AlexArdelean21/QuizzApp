@@ -1,5 +1,5 @@
 import { cookies } from "next/headers"
-import { createServerClient } from "@supabase/ssr"
+import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
 
 export async function createSupabaseServerClient() {
@@ -14,21 +14,22 @@ export async function createSupabaseServerClient() {
   }
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
+    // cookieOptions is merged into every Set-Cookie the library writes, so
+    // the options object received in setAll already reflects these values.
     cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return cookieStore.getAll()
       },
-      setAll(cookiesToSet, headers) {
+      setAll(cookiesToSet) {
         try {
-          cookiesToSet.forEach(({ name, value }) => {
-            cookieStore.set(name, value, SUPABASE_COOKIE_OPTIONS)
-          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options as CookieOptions)
+          )
         } catch {
-          // In Server Components cookies().set() throws; middleware handles refresh.
+          // setAll is called from a Server Component where cookies().set()
+          // throws by design. The middleware refreshes the session instead.
         }
-        // headers (Cache-Control etc.) cannot be set from Server Components.
-        void headers
       },
     },
   })

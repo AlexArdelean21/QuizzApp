@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createServerClient, type CookieOptions } from "@supabase/ssr"
+import { createServerClient } from "@supabase/ssr"
+import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth"]
 
@@ -9,17 +10,15 @@ export async function updateSession(request: NextRequest) {
     (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`)
   )
 
-  // Pass through public routes without touching the Supabase client at all.
-  // This is critical for /auth/callback: any getUser() call here could trigger
-  // applyServerStorage which modifies request.cookies via setAll, potentially
-  // overwriting the PKCE code-verifier cookie before the route handler can read it.
+  // Pass public routes through without creating a Supabase client.
+  // This is essential for /auth/callback: calling getUser() here would trigger
+  // applyServerStorage, which could overwrite the PKCE code-verifier cookie
+  // in request.cookies before the route handler gets to read it.
   if (isPublic) {
     return NextResponse.next({ request })
   }
 
-  let response = NextResponse.next({
-    request,
-  })
+  let response = NextResponse.next({ request })
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -29,6 +28,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll()
@@ -37,13 +37,9 @@ export async function updateSession(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value)
         })
-
-        response = NextResponse.next({
-          request,
-        })
-
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options as CookieOptions)
+        response = NextResponse.next({ request })
+        cookiesToSet.forEach(({ name, value }) => {
+          response.cookies.set(name, value, SUPABASE_COOKIE_OPTIONS)
         })
       },
     },
