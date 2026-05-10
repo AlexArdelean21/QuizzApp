@@ -46,7 +46,6 @@ export default function LoginPage() {
           email,
           password,
         })
-        console.log("Rezultat Login:", { data, error })
 
         if (error) {
           setErrorMessage(error.message)
@@ -54,7 +53,27 @@ export default function LoginPage() {
           return
         }
 
-        window.location.href = "/"
+        const user = data.user
+        if (!user) {
+          window.location.href = "/"
+          return
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle()
+        console.log("Profile Fetch Error: ", profileError)
+        console.log("Profile Fetch Data: ", profile)
+
+        if (profileError) {
+          console.error("Failed to fetch profile role after login:", profileError)
+          window.location.href = "/"
+          return
+        }
+
+        window.location.href = profile?.role === "admin" ? "/admin" : "/"
         return
       }
 

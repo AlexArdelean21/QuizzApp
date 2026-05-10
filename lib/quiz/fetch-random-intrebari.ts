@@ -125,17 +125,94 @@ export async function fetchQuestionsBySource(
   return shuffleInPlaceAndLimit(mapped, count)
 }
 
-export async function fetchDistinctExamIds(supabase: SupabaseClient): Promise<number[]> {
-  const { data, error } = await supabase.from("intrebari").select("examen_id")
-  if (error) throw new Error(error.message)
-  const distinct = new Set<number>()
-  for (const row of data ?? []) {
-    const examenId = Number(row.examen_id ?? 0)
-    if (Number.isFinite(examenId) && examenId > 0) {
-      distinct.add(examenId)
+export async function fetchDistinctExamIds(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<number[]> {
+  const normalizeExamIds = (rows: Array<{ id?: unknown; examen_id?: unknown }>) =>
+    rows
+      .map((row) => Number(row.id ?? row.examen_id))
+      .filter((id) => Number.isFinite(id) && id > 0)
+
+  const fetchAllExamIds = async () => {
+    const { data: examRows, error: examError } = await supabase
+      .from("examene")
+      .select("id")
+      .order("id", { ascending: true })
+
+    if (!examError) {
+      return normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
     }
+
+    // Fallback when `examene` is blocked by RLS for clients.
+    const { data: questionRows, error: questionError } = await supabase
+      .from("intrebari")
+      .select("examen_id")
+
+    if (questionError) throw new Error(examError.message)
+    return [...new Set(normalizeExamIds((questionRows ?? []) as Array<{ examen_id?: unknown }>))]
+      .sort((a, b) => a - b)
   }
-  return [...distinct].sort((a, b) => a - b)
+
+  const fetchExamIdsFromAllowed = async (allowedIds: number[]) => {
+    if (allowedIds.length === 0) return []
+    const { data: examRows, error: examError } = await supabase
+      .from("examene")
+      .select("id")
+      .in("id", allowedIds)
+      .order("id", { ascending: true })
+
+    if (!examError) {
+      return normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
+    }
+
+    // Fallback when `examene` is blocked by RLS for clients.
+    const { data: questionRows, error: questionError } = await supabase
+      .from("intrebari")
+      .select("examen_id")
+      .in("examen_id", allowedIds)
+
+    if (questionError) throw new Error(examError.message)
+    return [...new Set(normalizeExamIds((questionRows ?? []) as Array<{ examen_id?: unknown }>))]
+      .sort((a, b) => a - b)
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle()
+
+  if (profileError) throw new Error(profileError.message)
+  const normalizedRole = String(profile?.role ?? "")
+    .trim()
+    .toLowerCase()
+
+  if (normalizedRole === "admin") {
+    return fetchAllExamIds()
+  }
+
+  if (normalizedRole !== "user") {
+    return []
+  }
+
+  const nowIso = new Date().toISOString()
+  const { data: accessRows, error: accessError } = await supabase
+    .from("acces_examene")
+    .select("examen_id")
+    .eq("user_id", userId)
+    .gt("data_expirare", nowIso)
+
+  if (accessError) throw new Error(accessError.message)
+
+  const accessIds = [...new Set((accessRows ?? []).map((row) => Number(row.examen_id)))]
+    .filter((id) => Number.isFinite(id) && id > 0)
+
+  if (accessIds.length === 0) {
+    return []
+  }
+
+  return fetchExamIdsFromAllowed(accessIds)
 }
 
 export async function toggleBookmarkForQuestion(

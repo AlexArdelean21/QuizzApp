@@ -56,7 +56,7 @@ export function QuizInterface() {
   const [mode, setMode] = useState<QuizMode>("simulation")
   const [practiceSource, setPracticeSource] = useState<PracticeSource>("all")
   const [selectedExamId, setSelectedExamId] = useState(1)
-  const [examOptions, setExamOptions] = useState<number[]>([1])
+  const [examOptions, setExamOptions] = useState<number[]>([])
   const [availablePracticeCount, setAvailablePracticeCount] = useState(0)
   const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTION_COUNT)
   const [isAvailabilityLoading, setIsAvailabilityLoading] = useState(false)
@@ -123,21 +123,40 @@ export function QuizInterface() {
 
   useEffect(() => {
     const bootstrap = async () => {
-      const [{ data: userData }, examIds] = await Promise.all([supabase.auth.getUser(), fetchDistinctExamIds(supabase)])
+      const { data: userData } = await supabase.auth.getUser()
       const activeUserId = userData.user?.id ?? null
       setUserId(activeUserId)
-      const normalizedExams = examIds.length > 0 ? examIds : [1]
-      setExamOptions(normalizedExams)
-      setSelectedExamId(normalizedExams[0])
-      await refreshAvailablePracticeCount(practiceSource, normalizedExams[0], activeUserId)
+      if (!activeUserId) {
+        setExamOptions([])
+        setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
+        return
+      }
+
+      const examIds = await fetchDistinctExamIds(supabase, activeUserId)
+      setExamOptions(examIds)
+
+      if (examIds.length === 0) {
+        setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
+        setAvailablePracticeCount(0)
+        return
+      }
+
+      const nextExamId = examIds[0]
+      setSelectedExamId(nextExamId)
+      await refreshAvailablePracticeCount(practiceSource, nextExamId, activeUserId)
     }
-    void bootstrap()
+    void bootstrap().catch((error) => {
+      console.error("Failed to load available exams:", error)
+      setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
+      setExamOptions([])
+      setAvailablePracticeCount(0)
+    })
   }, [supabase, refreshAvailablePracticeCount, practiceSource])
 
   useEffect(() => {
-    if (!isPracticeMode) return
+    if (!isPracticeMode || examOptions.length === 0) return
     void refreshAvailablePracticeCount(practiceSource, selectedExamId, userId)
-  }, [isPracticeMode, practiceSource, selectedExamId, userId, refreshAvailablePracticeCount])
+  }, [isPracticeMode, practiceSource, selectedExamId, userId, refreshAvailablePracticeCount, examOptions.length])
 
   useEffect(() => {
     if (!isPracticeMode) return
@@ -232,6 +251,10 @@ export function QuizInterface() {
   }
 
   const handleStartQuiz = () => {
+    if (examOptions.length === 0) {
+      setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
+      return
+    }
     if (isPracticeMode && availablePracticeCount === 0) return
     const selectedCount = mode === "simulation" ? DEFAULT_QUESTION_COUNT : Math.min(Math.max(1, availablePracticeCount), Math.min(MAX_PRACTICE_QUESTIONS, Math.max(1, questionCount)))
     void loadQuiz(mode, selectedCount, selectedExamId, practiceSource, userId)
@@ -286,7 +309,8 @@ export function QuizInterface() {
     const dynamicMax = Math.max(0, Math.min(MAX_PRACTICE_QUESTIONS, availablePracticeCount))
     const sliderMax = Math.max(1, dynamicMax)
     const sliderValue = Math.max(1, Math.min(questionCount, sliderMax))
-    const hasSingleExamOption = examOptions.length <= 1
+    const hasSingleExamOption = examOptions.length === 1
+    const noExamAccess = examOptions.length === 0
     return (
       <div className="min-h-screen bg-background">
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
@@ -298,9 +322,13 @@ export function QuizInterface() {
             <CardContent className="flex flex-col gap-6 pt-2">
               <div className="rounded-xl border border-border bg-secondary/30 p-5">
                 <label htmlFor="exam-id" className="text-sm font-medium text-foreground">Examen</label>
-                {hasSingleExamOption ? (
+                {noExamAccess ? (
+                  <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                    Nu ai acces la niciun examen momentan. Contactează administratorul.
+                  </p>
+                ) : hasSingleExamOption ? (
                   <p className="mt-2 rounded-lg border border-border/70 bg-card/60 px-3 py-2 text-sm text-muted-foreground">
-                    {EXAM_DISPLAY_NAME}
+                    Examen selectat: {EXAM_DISPLAY_NAME}
                   </p>
                 ) : (
                   <div className="relative mt-2">
@@ -362,7 +390,7 @@ export function QuizInterface() {
                   {availabilityMessage && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">{availabilityMessage}</p>}
                 </div>
               )}
-              <Button type="button" data-testid="quiz-start" onClick={handleStartQuiz} disabled={(isPracticeMode && availablePracticeCount === 0) || isAvailabilityLoading} className="w-full rounded-xl bg-white px-8 py-6 text-base font-medium text-black shadow-sm hover:bg-white/90 disabled:opacity-60">
+              <Button type="button" data-testid="quiz-start" onClick={handleStartQuiz} disabled={noExamAccess || (isPracticeMode && availablePracticeCount === 0) || isAvailabilityLoading} className="w-full rounded-xl bg-white px-8 py-6 text-base font-medium text-black shadow-sm hover:bg-white/90 disabled:opacity-60">
                 {isAvailabilityLoading ? "Se verifică întrebările..." : "Începe quiz-ul"}
               </Button>
             </CardContent>
