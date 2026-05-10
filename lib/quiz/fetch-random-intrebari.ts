@@ -141,7 +141,13 @@ export async function fetchDistinctExamIds(
       .order("id", { ascending: true })
 
     if (!examError) {
-      return normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
+      const ids = normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
+      if (ids.length === 0) {
+        console.error(
+          "Exam fetch returned empty. Check RLS policies on 'examene' and 'acces_examene' tables."
+        )
+      }
+      return ids
     }
 
     // Fallback when `examene` is blocked by RLS for clients.
@@ -163,7 +169,13 @@ export async function fetchDistinctExamIds(
       .order("id", { ascending: true })
 
     if (!examError) {
-      return normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
+      const ids = normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
+      if (ids.length === 0) {
+        console.error(
+          "Exam fetch returned empty. Check RLS policies on 'examene' and 'acces_examene' tables."
+        )
+      }
+      return ids
     }
 
     // Fallback when `examene` is blocked by RLS for clients.
