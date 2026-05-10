@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { ChevronDown } from "lucide-react"
 import {
   fetchDistinctExamIds,
   fetchQuestionsBySource,
@@ -55,6 +56,7 @@ export function QuizInterface() {
   const [status, setStatus] = useState<QuizStatus>("setup")
   const [mode, setMode] = useState<QuizMode>("simulation")
   const [practiceSource, setPracticeSource] = useState<PracticeSource>("all")
+  const [isPracticeSourceOpen, setIsPracticeSourceOpen] = useState(false)
   const [selectedExamId, setSelectedExamId] = useState(1)
   const [examOptions, setExamOptions] = useState<number[]>([])
   const [availablePracticeCount, setAvailablePracticeCount] = useState(0)
@@ -77,6 +79,7 @@ export function QuizInterface() {
   const modeRef = useRef(mode)
   const startedAtRef = useRef<number>(0)
   const finishedRef = useRef(false)
+  const practiceSourceDropdownRef = useRef<HTMLDivElement | null>(null)
 
   questionsRef.current = questions
   answersRef.current = answers
@@ -290,6 +293,21 @@ export function QuizInterface() {
     return () => window.removeEventListener("quiz-exit-request", openExitModal)
   }, [status])
 
+  useEffect(() => {
+    if (!isPracticeSourceOpen) return
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (!practiceSourceDropdownRef.current?.contains(target)) {
+        setIsPracticeSourceOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick)
+    return () => document.removeEventListener("mousedown", handleOutsideClick)
+  }, [isPracticeSourceOpen])
+
   if (status === "loading") return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Se încarcă întrebările…</div>
 
   if (status === "error") {
@@ -365,24 +383,50 @@ export function QuizInterface() {
               {mode === "practice" && (
                 <div className="rounded-xl border border-border bg-secondary/30 p-5">
                   <label htmlFor="practice-source" className="text-sm font-medium text-foreground">Sursă întrebări</label>
-                  <div className="relative mt-2">
-                    <select
+                  <div className="relative mt-2" ref={practiceSourceDropdownRef}>
+                    <button
                       id="practice-source"
-                      value={practiceSource}
-                      onChange={(e) => setPracticeSource(e.target.value as PracticeSource)}
-                      className="w-full appearance-none rounded-lg border border-border bg-card px-4 py-2.5 pr-10 text-sm text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isPracticeSourceOpen}
+                      onClick={() => setIsPracticeSourceOpen((prev) => !prev)}
+                      className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white transition-colors hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/40"
                     >
-                      <option value="all">Toate</option>
-                      <option value="bookmarked">Salvate</option>
-                      <option value="wrong">Greșite anterior</option>
-                    </select>
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 20 20"
-                      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    >
-                      <path d="m5 7 5 6 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                      <span>{sourceLabelMap[practiceSource].charAt(0).toUpperCase() + sourceLabelMap[practiceSource].slice(1)}</span>
+                      <ChevronDown
+                        className={`size-4 text-slate-400 transition-transform ${isPracticeSourceOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+
+                    {isPracticeSourceOpen && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="practice-source"
+                        className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-slate-700 bg-slate-900 shadow-xl"
+                      >
+                        {([
+                          { value: "all", label: "Toate" },
+                          { value: "bookmarked", label: "Salvate" },
+                          { value: "wrong", label: "Greșite anterior" },
+                        ] as const).map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setPracticeSource(option.value)
+                              setIsPracticeSourceOpen(false)
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                              practiceSource === option.value
+                                ? "bg-slate-800 text-white"
+                                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <p className="mt-4 text-sm font-medium text-foreground">Număr întrebări: {dynamicMax === 0 ? 0 : sliderValue}</p>
                   <input type="range" min={1} max={sliderMax} value={dynamicMax === 0 ? 1 : sliderValue} onChange={(e) => setQuestionCount(Number(e.target.value))} className="mt-2 w-full accent-primary" disabled={availablePracticeCount === 0 || isAvailabilityLoading} />
