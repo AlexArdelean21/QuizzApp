@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("login")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [rememberMe, setRememberMe] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -39,44 +40,30 @@ export default function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      const supabase = getSupabaseBrowserClient()
-
       if (mode === "login") {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            rememberMe,
+          }),
         })
+        const result = await response.json()
 
-        if (error) {
-          setErrorMessage(error.message)
+        if (!response.ok) {
+          setErrorMessage(result.error ?? "Nu s-a putut face autentificarea.")
           setIsSubmitting(false)
           return
         }
 
-        const user = data.user
-        if (!user) {
-          window.location.href = "/"
-          return
-        }
-
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle()
-        console.log("Profile Fetch Error: ", profileError)
-        console.log("Profile Fetch Data: ", profile)
-
-        if (profileError) {
-          console.error("Failed to fetch profile role after login:", profileError)
-          window.location.href = "/"
-          return
-        }
-
-        window.location.href = profile?.role === "admin" ? "/admin" : "/"
+        window.location.href = result.redirectTo ?? "/"
         return
       }
 
+      const supabase = getSupabaseBrowserClient()
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -134,13 +121,18 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background">
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
+        <div className="self-center text-center">
+          <h1 className="bg-gradient-to-r from-primary via-sky-400 to-blue-500 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">
+            QuizHub
+          </h1>
+        </div>
         <Card className="w-full max-w-md self-center border-2 border-border/90 bg-card shadow-xl shadow-primary/10 ring-1 ring-primary/15">
           <CardHeader className="pb-2">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Autentificare
             </p>
             <h1 className="text-2xl font-semibold text-foreground md:text-3xl">
-              {mode === "login" ? "Log in" : "Sign up"}
+              {mode === "login" ? "Conectare" : "Creare cont"}
             </h1>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 pt-2">
@@ -158,7 +150,7 @@ export default function LoginPage() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Log in
+                Conectare
               </button>
               <button
                 type="button"
@@ -172,7 +164,7 @@ export default function LoginPage() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Sign up
+                Creare cont
               </button>
             </div>
 
@@ -216,6 +208,18 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
+              {mode === "login" && (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) => setRememberMe(event.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-sky-600 focus:outline-none focus:ring-0 focus-visible:outline-none outline-none"
+                  />
+                  Ține-mă minte
+                </label>
+              )}
 
               {mode === "signup" && (
                 <div className="flex flex-col gap-1.5">
@@ -263,8 +267,8 @@ export default function LoginPage() {
                 {isSubmitting
                   ? "Se procesează..."
                   : mode === "login"
-                    ? "Log in"
-                    : "Sign up"}
+                    ? "Conectare"
+                    : "Creare cont"}
               </Button>
             </form>
 
@@ -274,7 +278,7 @@ export default function LoginPage() {
               onClick={handleForgotPassword}
               className="text-left text-sm text-primary underline-offset-4 transition hover:underline disabled:opacity-50"
             >
-              Forgot Password?
+              Ai uitat parola?
             </button>
           </CardContent>
         </Card>

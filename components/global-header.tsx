@@ -92,7 +92,7 @@ export function GlobalHeader() {
           href="/"
           className="justify-self-center truncate px-2 text-sm font-semibold tracking-wide text-foreground md:text-base"
         >
-          QuizzApp
+          QuizHub
         </Link>
 
         <div className="justify-self-end inline-flex items-center gap-2">
@@ -101,7 +101,7 @@ export function GlobalHeader() {
               href={isAdminRoute ? "/" : "/admin"}
               className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
             >
-              {isAdminRoute ? "Go to Quiz App" : "Go to Admin Dashboard"}
+              {isAdminRoute ? "Go to QuizHub" : "Go to Admin Dashboard"}
             </Link>
           )}
 
