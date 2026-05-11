@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { LogOut, X } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { ThemeToggler } from "@/components/ThemeToggler"
 
 export function GlobalHeader() {
   const pathname = usePathname()
@@ -74,7 +75,7 @@ export function GlobalHeader() {
 
   return (
     <header className="sticky top-0 z-[60] w-full bg-background/85 backdrop-blur-md">
-      <div className="mx-auto grid h-14 w-full max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto grid h-20 w-full max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6 lg:px-8">
         <div className="justify-self-start">
           {showExit && pathname === "/" && (
             <button
@@ -90,12 +91,14 @@ export function GlobalHeader() {
 
         <Link
           href="/"
-          className="justify-self-center truncate px-2 text-sm font-semibold tracking-wide text-foreground md:text-base"
+          className="justify-self-center truncate px-2 bg-gradient-to-r from-primary via-sky-400 to-blue-500 bg-clip-text text-4xl font-extrabold leading-none text-transparent"
         >
           QuizHub
         </Link>
 
         <div className="justify-self-end inline-flex items-center gap-2">
+          <ThemeToggler />
+
           {isAdmin && (
             <Link
               href={isAdminRoute ? "/" : "/admin"}

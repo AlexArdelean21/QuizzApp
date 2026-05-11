@@ -57,6 +57,7 @@ export function QuizInterface() {
   const [mode, setMode] = useState<QuizMode>("simulation")
   const [practiceSource, setPracticeSource] = useState<PracticeSource>("all")
   const [isPracticeSourceOpen, setIsPracticeSourceOpen] = useState(false)
+  const [isExamDropdownOpen, setIsExamDropdownOpen] = useState(false)
   const [selectedExamId, setSelectedExamId] = useState(1)
   const [examOptions, setExamOptions] = useState<number[]>([])
   const [availablePracticeCount, setAvailablePracticeCount] = useState(0)
@@ -80,6 +81,7 @@ export function QuizInterface() {
   const startedAtRef = useRef<number>(0)
   const finishedRef = useRef(false)
   const practiceSourceDropdownRef = useRef<HTMLDivElement | null>(null)
+  const examDropdownRef = useRef<HTMLDivElement | null>(null)
 
   questionsRef.current = questions
   answersRef.current = answers
@@ -308,6 +310,21 @@ export function QuizInterface() {
     return () => document.removeEventListener("mousedown", handleOutsideClick)
   }, [isPracticeSourceOpen])
 
+  useEffect(() => {
+    if (!isExamDropdownOpen) return
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (!examDropdownRef.current?.contains(target)) {
+        setIsExamDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick)
+    return () => document.removeEventListener("mousedown", handleOutsideClick)
+  }, [isExamDropdownOpen])
+
   if (status === "loading") return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Se încarcă întrebările…</div>
 
   if (status === "error") {
@@ -349,26 +366,46 @@ export function QuizInterface() {
                     Examen selectat: {EXAM_DISPLAY_NAME}
                   </p>
                 ) : (
-                  <div className="relative mt-2">
-                    <select
+                  <div className="relative mt-2" ref={examDropdownRef}>
+                    <button
                       id="exam-id"
-                      value={selectedExamId}
-                      onChange={(e) => setSelectedExamId(Number(e.target.value))}
-                      className="w-full appearance-none rounded-lg border border-border bg-card px-4 py-2.5 pr-10 text-sm text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isExamDropdownOpen}
+                      onClick={() => setIsExamDropdownOpen((prev) => !prev)}
+                      className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:hover:border-slate-700"
                     >
-                      {examOptions.map((examId) => (
-                        <option key={examId} value={examId}>
-                          {EXAM_DISPLAY_NAME} (ID {examId})
-                        </option>
-                      ))}
-                    </select>
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 20 20"
-                      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    >
-                      <path d="m5 7 5 6 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                      <span>{EXAM_DISPLAY_NAME} (ID {selectedExamId})</span>
+                      <ChevronDown
+                        className={`size-4 text-slate-500 transition-transform dark:text-slate-400 ${isExamDropdownOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+
+                    {isExamDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="exam-id"
+                        className="absolute z-[70] mt-1 w-full min-w-[14rem] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900"
+                      >
+                        {examOptions.map((examId) => (
+                          <button
+                            key={examId}
+                            type="button"
+                            onClick={() => {
+                              setSelectedExamId(examId)
+                              setIsExamDropdownOpen(false)
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                              selectedExamId === examId
+                                ? "bg-blue-50 text-blue-700 dark:bg-slate-800 dark:text-blue-300"
+                                : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                            }`}
+                          >
+                            {EXAM_DISPLAY_NAME} (ID {examId})
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -390,11 +427,11 @@ export function QuizInterface() {
                       aria-haspopup="listbox"
                       aria-expanded={isPracticeSourceOpen}
                       onClick={() => setIsPracticeSourceOpen((prev) => !prev)}
-                      className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white transition-colors hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:hover:border-slate-700"
                     >
                       <span>{sourceLabelMap[practiceSource].charAt(0).toUpperCase() + sourceLabelMap[practiceSource].slice(1)}</span>
                       <ChevronDown
-                        className={`size-4 text-slate-400 transition-transform ${isPracticeSourceOpen ? "rotate-180" : ""}`}
+                        className={`size-4 text-slate-500 transition-transform dark:text-slate-400 ${isPracticeSourceOpen ? "rotate-180" : ""}`}
                       />
                     </button>
 
@@ -402,7 +439,7 @@ export function QuizInterface() {
                       <div
                         role="listbox"
                         aria-labelledby="practice-source"
-                        className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-slate-700 bg-slate-900 shadow-xl"
+                        className="absolute z-[70] mt-1 w-full min-w-[14rem] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900"
                       >
                         {([
                           { value: "all", label: "Toate" },
@@ -418,8 +455,8 @@ export function QuizInterface() {
                             }}
                             className={`w-full px-3 py-2 text-left text-sm transition-colors ${
                               practiceSource === option.value
-                                ? "bg-slate-800 text-white"
-                                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                                ? "bg-blue-50 text-blue-700 dark:bg-slate-800 dark:text-blue-300"
+                                : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                             }`}
                           >
                             {option.label}
