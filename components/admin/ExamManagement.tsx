@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import { ChevronDown } from "lucide-react"
 import {
   deleteExam,
   importExamFromExcel,
@@ -22,6 +23,7 @@ type ExamManagementProps = {
 
 export function ExamManagement({ examene }: ExamManagementProps) {
   const router = useRouter()
+  const [isExpanded, setIsExpanded] = useState(true)
 
   const [examName, setExamName] = useState("")
   const [file, setFile] = useState<File | null>(null)
@@ -195,99 +197,118 @@ export function ExamManagement({ examene }: ExamManagementProps) {
 
   return (
     <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <h2 className="text-xl font-semibold text-foreground">Exam Management</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Creează examene noi, actualizează întrebări și gestionează examenele existente.
-      </p>
-
-      <div className="mt-5 rounded-lg border border-border bg-card/80 p-4">
-        <h3 className="text-base font-semibold text-foreground">Creare examen nou</h3>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <input
-            value={examName}
-            onChange={(event) => setExamName(event.target.value)}
-            placeholder="Nume examen"
-            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
-            disabled={isBusy}
-          />
-          <input
-            key={file?.name ?? "empty"}
-            type="file"
-            accept=".xlsx"
-            onChange={(event) => {
-              const nextFile = event.target.files?.[0] ?? null
-              setFile(nextFile)
-              setPreviewCount(null)
-              setPreviewSkippedRows(0)
-            }}
-            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:text-slate-100"
-            disabled={isBusy}
-          />
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={handlePreview} disabled={!canPreview}>
-            {previewing ? "Preview..." : "Preview"}
-          </Button>
-          <Button type="button" onClick={handleCreateExam} disabled={!canCreate}>
-            {creating ? "Import în curs..." : "Importă examen nou"}
-          </Button>
-        </div>
-        {previewCount !== null ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Întrebări detectate: {previewCount}
-            {previewSkippedRows > 0
-              ? ` (${previewSkippedRows} rânduri ignorate: incomplete sau fără răspuns evidențiat).`
-              : ""}
+      <button
+        type="button"
+        onClick={() => setIsExpanded((prev) => !prev)}
+        className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left transition-colors hover:bg-slate-100/70 dark:hover:bg-slate-900/70"
+      >
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Exam Management</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Creează examene noi, actualizează întrebări și gestionează examenele existente.
           </p>
-        ) : null}
-      </div>
-
-      <div className="mt-5 rounded-lg border border-border bg-card/80 p-4">
-        <h3 className="text-base font-semibold text-foreground">Examene existente</h3>
-        {examene.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">Nu există examene.</p>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {examene.map((exam) => (
-              <div
-                key={exam.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2"
-              >
-                <span className="text-sm text-slate-100">{exam.nume_examen}</span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleOpenUpdateModal(exam)}
-                    disabled={isBusy}
-                  >
-                    Update
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      setDeleteTargetExam(exam)
-                      setDeleteConfirmationInput("")
-                    }}
-                    disabled={isBusy}
-                  >
-                    Șterge
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {toast ? (
-        <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${toastClasses}`}>
-          {toast.message}
         </div>
-      ) : null}
+        <ChevronDown
+          className={`size-5 text-muted-foreground transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      <div
+        className={`grid transition-all duration-300 ${isExpanded ? "mt-4 grid-rows-[1fr] opacity-100" : "mt-0 grid-rows-[0fr] opacity-0"}`}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-1 rounded-lg border border-border bg-card/80 p-4">
+            <h3 className="text-base font-semibold text-foreground">Creare examen nou</h3>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <input
+                value={examName}
+                onChange={(event) => setExamName(event.target.value)}
+                placeholder="Nume examen"
+                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
+                disabled={isBusy}
+              />
+              <input
+                key={file?.name ?? "empty"}
+                type="file"
+                accept=".xlsx"
+                onChange={(event) => {
+                  const nextFile = event.target.files?.[0] ?? null
+                  setFile(nextFile)
+                  setPreviewCount(null)
+                  setPreviewSkippedRows(0)
+                }}
+                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:text-slate-100"
+                disabled={isBusy}
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={handlePreview} disabled={!canPreview}>
+                {previewing ? "Preview..." : "Preview"}
+              </Button>
+              <Button type="button" onClick={handleCreateExam} disabled={!canCreate}>
+                {creating ? "Import în curs..." : "Importă examen nou"}
+              </Button>
+            </div>
+            {previewCount !== null ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Întrebări detectate: {previewCount}
+                {previewSkippedRows > 0
+                  ? ` (${previewSkippedRows} rânduri ignorate: incomplete sau fără răspuns evidențiat).`
+                  : ""}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-5 rounded-lg border border-border bg-card/80 p-4">
+            <h3 className="text-base font-semibold text-foreground">Examene existente</h3>
+            {examene.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">Nu există examene.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {examene.map((exam) => (
+                  <div
+                    key={exam.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2"
+                  >
+                    <span className="text-sm text-slate-100">
+                      {exam.nume_examen}{" "}
+                      <span className="text-slate-500">- ({exam.question_count ?? 0} întrebări)</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleOpenUpdateModal(exam)}
+                        disabled={isBusy}
+                      >
+                        Update
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          setDeleteTargetExam(exam)
+                          setDeleteConfirmationInput("")
+                        }}
+                        disabled={isBusy}
+                      >
+                        Șterge
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {toast ? (
+            <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${toastClasses}`}>
+              {toast.message}
+            </div>
+          ) : null}
+        </div>
+      </div>
 
       {deleteTargetExam ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">

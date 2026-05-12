@@ -25,7 +25,7 @@ export default async function AdminPage() {
     })
 
     const nowIso = new Date().toISOString()
-    const [profilesResult, exameneResult, accessResult] = await Promise.all([
+    const [profilesResult, exameneResult, accessResult, questionsResult] = await Promise.all([
       adminSupabase
         .from("profiles")
         .select("id, nume, email, role")
@@ -36,19 +36,28 @@ export default async function AdminPage() {
         .from("acces_examene")
         .select("user_id, examen_id, data_expirare")
         .gt("data_expirare", nowIso),
+      adminSupabase.from("intrebari").select("examen_id"),
     ])
 
-    if (profilesResult.error || exameneResult.error || accessResult.error) {
+    if (profilesResult.error || exameneResult.error || accessResult.error || questionsResult.error) {
       fetchError =
         profilesResult.error?.message ||
         exameneResult.error?.message ||
         accessResult.error?.message ||
+        questionsResult.error?.message ||
         "A apărut o eroare la încărcarea datelor admin."
     } else {
       profiles = profilesResult.data ?? []
+      const questionCountByExamId = new Map<number, number>()
+      for (const row of questionsResult.data ?? []) {
+        const examId = Number(row.examen_id)
+        questionCountByExamId.set(examId, (questionCountByExamId.get(examId) ?? 0) + 1)
+      }
+
       examene = (exameneResult.data ?? []).map((exam) => ({
         id: Number(exam.id),
         nume_examen: exam.nume_examen ?? `Examen ${exam.id}`,
+        question_count: questionCountByExamId.get(Number(exam.id)) ?? 0,
       }))
 
       const examNameById = new Map<number, string>(

@@ -14,6 +14,7 @@ export type UserProfileRow = {
 export type ExamOption = {
   id: number
   nume_examen: string
+  question_count?: number
 }
 
 type UsersTableProps = {
