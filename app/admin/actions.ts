@@ -103,7 +103,7 @@ function detectCorrectAnswer(row: ExcelJS.Row): "a" | "b" | "c" | null {
 
 async function parseExamWorkbook(buffer: Buffer): Promise<ParseExamResult> {
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(buffer)
+  await workbook.xlsx.load(buffer as any)
 
   const questions: ParsedExamQuestion[] = []
   let skippedRows = 0
