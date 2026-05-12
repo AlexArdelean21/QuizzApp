@@ -454,57 +454,34 @@ export async function updateExam(formData: FormData) {
 }
 
 export async function deleteExam(examId: number) {
-  await assertAdminActor()
-  const adminSupabase = getAdminServiceClient()
-
-  if (!Number.isFinite(examId) || examId <= 0) {
-    throw new Error("ID-ul examenului este invalid.")
-  }
-
-  const { data: exam, error: readExamError } = await adminSupabase
-    .from("examene")
-    .select("id")
-    .eq("id", examId)
-    .maybeSingle()
-
-  if (readExamError) {
-    throw new Error("Nu s-a putut verifica examenul selectat.")
-  }
-  if (!exam) {
-    throw new Error("Examenul nu există sau a fost deja șters.")
-  }
-
-  // Fallback cleanup for schemas where CASCADE is not yet configured.
-  for (const tableName of [
-    "status_invatare",
-    "bookmarks",
-    "acces_examene",
-    "intrebari_salvate",
-    "progres_utilizator",
-    "intrebari",
-  ]) {
-    const { error: cleanupError } = await adminSupabase
-      .from(tableName)
-      .delete()
-      .eq("examen_id", examId)
-
-    if (cleanupError) {
-      if ((cleanupError as { code?: string }).code === "42P01") {
-        continue
+  try {
+    const adminSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
       }
-      throw new Error(`Nu s-au putut șterge datele dependente (${tableName}).`)
-    }
-  }
+    )
 
-  const { error } = await adminSupabase.from("examene").delete().eq("id", examId)
-  if (error) {
-    if ((error as { code?: string }).code === "23503") {
-      throw new Error(
-        "Examenul nu poate fi șters deoarece există date dependente. Verifică relațiile FK sau rulează migrarea de CASCADE."
-      )
-    }
-    throw new Error("Ștergerea examenului a eșuat. Încearcă din nou.")
-  }
+    // This single call will automatically trigger ON DELETE CASCADE in the database
+    const { error } = await adminSupabase
+      .from("examene")
+      .delete()
+      .eq("id", examId)
 
-  revalidatePath("/admin")
+    if (error) {
+      console.error("Supabase delete error:", error)
+      throw new Error("Eroare internă la ștergerea examenului.")
+    }
+
+    revalidatePath("/admin")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Delete exam failed:", error)
+    throw new Error(error.message || "Nu am putut șterge examenul.")
+  }
 }
