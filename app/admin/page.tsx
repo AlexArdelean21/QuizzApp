@@ -4,6 +4,7 @@ import {
   type UserProfileRow,
   type ExamOption,
 } from "@/components/admin/UsersTable"
+import { ExamManager } from "@/components/admin/ExamManager"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +14,7 @@ export default async function AdminPage() {
 
   let profiles: UserProfileRow[] = []
   let examene: ExamOption[] = []
-  let activeAccessByUser: Record<string, string[]> = {}
+  const activeAccessByUser: Record<string, string[]> = {}
   let fetchError: string | null = null
 
   if (!supabaseUrl || !serviceRoleKey) {
@@ -84,11 +85,14 @@ export default async function AdminPage() {
             Nu am putut încărca utilizatorii: {fetchError}
           </p>
         ) : (
-          <UsersTable
-            profiles={profiles}
-            examene={examene}
-            activeAccessByUser={activeAccessByUser}
-          />
+          <>
+            <ExamManager />
+            <UsersTable
+              profiles={profiles}
+              examene={examene}
+              activeAccessByUser={activeAccessByUser}
+            />
+          </>
         )}
       </div>
     </main>

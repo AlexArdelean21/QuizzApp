@@ -58,7 +58,7 @@ export function QuizInterface() {
   const [practiceSource, setPracticeSource] = useState<PracticeSource>("all")
   const [isPracticeSourceOpen, setIsPracticeSourceOpen] = useState(false)
   const [isExamDropdownOpen, setIsExamDropdownOpen] = useState(false)
-  const [selectedExamId, setSelectedExamId] = useState(1)
+  const [selectedExamId, setSelectedExamId] = useState<number | null>(null)
   const [examOptions, setExamOptions] = useState<number[]>([])
   const [availablePracticeCount, setAvailablePracticeCount] = useState(0)
   const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTION_COUNT)
@@ -133,6 +133,7 @@ export function QuizInterface() {
       setUserId(activeUserId)
       if (!activeUserId) {
         setExamOptions([])
+        setSelectedExamId(null)
         setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
         return
       }
@@ -141,6 +142,7 @@ export function QuizInterface() {
       setExamOptions(examIds)
 
       if (examIds.length === 0) {
+        setSelectedExamId(null)
         setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
         setAvailablePracticeCount(0)
         return
@@ -159,9 +161,16 @@ export function QuizInterface() {
   }, [supabase, refreshAvailablePracticeCount, practiceSource])
 
   useEffect(() => {
-    if (!isPracticeMode || examOptions.length === 0) return
+    if (!isPracticeMode || examOptions.length === 0 || selectedExamId == null) return
     void refreshAvailablePracticeCount(practiceSource, selectedExamId, userId)
-  }, [isPracticeMode, practiceSource, selectedExamId, userId, refreshAvailablePracticeCount, examOptions.length])
+  }, [
+    isPracticeMode,
+    practiceSource,
+    selectedExamId,
+    userId,
+    refreshAvailablePracticeCount,
+    examOptions.length,
+  ])
 
   useEffect(() => {
     if (!isPracticeMode) return
@@ -232,13 +241,13 @@ export function QuizInterface() {
     if (isPracticeMode && selectedAnswer) return
     setSelectedAnswer(answerId)
     setAnswers((prev) => ({ ...prev, [currentQuestion.id]: answerId }))
-    if (userId) {
+    if (userId && selectedExamId != null) {
       void updateLearningStatus(supabase, { userId, examenId: selectedExamId, intrebareId: currentQuestion.id, isCorrect: answerId === currentQuestion.correctAnswer })
     }
   }
 
   const handleToggleBookmark = () => {
-    if (!currentQuestion || !userId) return
+    if (!currentQuestion || !userId || selectedExamId == null) return
     const shouldBookmark = !bookmarkedQuestions.has(currentQuestion.id)
     setBookmarkedQuestions((prev) => {
       const next = new Set(prev)
@@ -258,6 +267,10 @@ export function QuizInterface() {
   const handleStartQuiz = () => {
     if (examOptions.length === 0) {
       setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
+      return
+    }
+    if (selectedExamId == null) {
+      setAvailabilityMessage("Selectează un examen înainte să pornești quiz-ul.")
       return
     }
     if (isPracticeMode && availablePracticeCount === 0) return
@@ -375,7 +388,7 @@ export function QuizInterface() {
                       onClick={() => setIsExamDropdownOpen((prev) => !prev)}
                       className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:hover:border-slate-700"
                     >
-                      <span>{EXAM_DISPLAY_NAME} (ID {selectedExamId})</span>
+                      <span>{selectedExamId ? `${EXAM_DISPLAY_NAME} (ID ${selectedExamId})` : "Selectează examen"}</span>
                       <ChevronDown
                         className={`size-4 text-slate-500 transition-transform dark:text-slate-400 ${isExamDropdownOpen ? "rotate-180" : ""}`}
                       />

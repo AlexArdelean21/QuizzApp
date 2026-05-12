@@ -39,12 +39,18 @@ function shuffleInPlaceAndLimit(items: QuizQuestion[], count: number) {
   return items.slice(0, Math.min(count, items.length))
 }
 
+function isValidExamId(examenId: number) {
+  return Number.isFinite(examenId) && examenId > 0
+}
+
 async function fetchQuestionIdsForSource(
   supabase: SupabaseClient,
   userId: string,
   examenId: number,
   source: PracticeSource
 ): Promise<string[]> {
+  if (!userId || !isValidExamId(examenId)) return []
+
   if (source === "bookmarked") {
     const { data, error } = await supabase
       .from("bookmarks")
@@ -72,6 +78,8 @@ export async function getAvailableQuestionCount(
   params: { examenId: number; source: PracticeSource; userId: string }
 ): Promise<number> {
   const { examenId, source, userId } = params
+  if (!isValidExamId(examenId)) return 0
+  if (source !== "all" && !userId) return 0
   if (source === "all") {
     const { count, error } = await supabase
       .from("intrebari")
@@ -96,6 +104,8 @@ export async function fetchQuestionsBySource(
 ): Promise<QuizQuestion[]> {
   const { count, examenId, source, userId } = params
   if (count <= 0) return []
+  if (!isValidExamId(examenId)) return []
+  if (source !== "all" && !userId) return []
 
   if (source === "all") {
     const { data, error } = await supabase
@@ -232,6 +242,7 @@ export async function toggleBookmarkForQuestion(
   params: { userId: string; examenId: number; intrebareId: string; shouldBookmark: boolean }
 ) {
   const { userId, examenId, intrebareId, shouldBookmark } = params
+  if (!userId || !isValidExamId(examenId) || !intrebareId) return
   if (shouldBookmark) {
     const { error } = await supabase.from("bookmarks").upsert(
       {
@@ -259,6 +270,7 @@ export async function updateLearningStatus(
   params: { userId: string; examenId: number; intrebareId: string; isCorrect: boolean }
 ) {
   const { userId, examenId, intrebareId, isCorrect } = params
+  if (!userId || !isValidExamId(examenId) || !intrebareId) return
 
   const { data: existing, error: readError } = await supabase
     .from("status_invatare")
