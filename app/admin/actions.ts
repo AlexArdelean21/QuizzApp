@@ -150,6 +150,22 @@ function getFileFromFormData(formData: FormData) {
   return rawFile
 }
 
+function getOptionalFileFromFormData(formData: FormData) {
+  const rawFile = formData.get("file")
+  if (rawFile == null || rawFile === "") return null
+  if (!(rawFile instanceof File)) {
+    throw new Error("Fișierul încărcat este invalid.")
+  }
+  if (!rawFile.name.toLowerCase().endsWith(".xlsx")) {
+    throw new Error("Fișier invalid. Se acceptă doar .xlsx.")
+  }
+  return rawFile
+}
+
+function normalizeQuestionKey(text: string) {
+  return normalizeText(text).toLowerCase()
+}
+
 export async function deleteUser(userId: string) {
   await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
@@ -242,10 +258,9 @@ export async function importExamFromExcel(formData: FormData) {
   await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
 
+  const existingExamenIdRaw = Number(formData.get("existingExamenId"))
+  const hasExistingExamenId = Number.isFinite(existingExamenIdRaw) && existingExamenIdRaw > 0
   const examName = String(formData.get("examName") ?? "").trim()
-  if (!examName) {
-    throw new Error("Numele examenului este obligatoriu.")
-  }
 
   const file = getFileFromFormData(formData)
   const buffer = Buffer.from(await file.arrayBuffer())
@@ -255,26 +270,81 @@ export async function importExamFromExcel(formData: FormData) {
     throw new Error("Nu am detectat întrebări valide în fișierul selectat.")
   }
 
-  const { data: createdExam, error: createExamError } = await adminSupabase
-    .from("examene")
-    .insert({ nume_examen: examName })
-    .select("id")
-    .single()
+  let examenId: number
+  let createdNewExam = false
 
-  if (createExamError || !createdExam) {
-    throw new Error(createExamError?.message ?? "Nu s-a putut crea examenul.")
+  if (hasExistingExamenId) {
+    examenId = existingExamenIdRaw
+    const { data: existingExam, error: existingExamError } = await adminSupabase
+      .from("examene")
+      .select("id")
+      .eq("id", examenId)
+      .maybeSingle()
+
+    if (existingExamError || !existingExam) {
+      throw new Error(existingExamError?.message ?? "Examenul selectat nu există.")
+    }
+  } else {
+    if (!examName) {
+      throw new Error("Numele examenului este obligatoriu.")
+    }
+
+    const { data: createdExam, error: createExamError } = await adminSupabase
+      .from("examene")
+      .insert({ nume_examen: examName })
+      .select("id")
+      .single()
+
+    if (createExamError || !createdExam) {
+      throw new Error(createExamError?.message ?? "Nu s-a putut crea examenul.")
+    }
+
+    createdNewExam = true
+    examenId = Number(createdExam.id)
   }
 
-  const examenId = Number(createdExam.id)
-  const rowsToInsert = parsed.questions.map((row) => ({
-    examen_id: examenId,
-    ...row,
-  }))
+  const { data: existingQuestionRows, error: existingQuestionRowsError } = await adminSupabase
+    .from("intrebari")
+    .select("intrebare_text")
+    .eq("examen_id", examenId)
 
-  const { error: insertError } = await adminSupabase.from("intrebari").insert(rowsToInsert)
-  if (insertError) {
-    await adminSupabase.from("examene").delete().eq("id", examenId)
-    throw new Error(insertError.message)
+  if (existingQuestionRowsError) {
+    if (createdNewExam) {
+      await adminSupabase.from("examene").delete().eq("id", examenId)
+    }
+    throw new Error(existingQuestionRowsError.message)
+  }
+
+  const knownQuestionKeys = new Set(
+    (existingQuestionRows ?? [])
+      .map((row) => normalizeQuestionKey(String(row.intrebare_text ?? "")))
+      .filter(Boolean)
+  )
+
+  const rowsToInsert = []
+  let duplicateCount = 0
+
+  for (const row of parsed.questions) {
+    const key = normalizeQuestionKey(row.intrebare_text)
+    if (!key || knownQuestionKeys.has(key)) {
+      duplicateCount += 1
+      continue
+    }
+    knownQuestionKeys.add(key)
+    rowsToInsert.push({
+      examen_id: examenId,
+      ...row,
+    })
+  }
+
+  if (rowsToInsert.length > 0) {
+    const { error: insertError } = await adminSupabase.from("intrebari").insert(rowsToInsert)
+    if (insertError) {
+      if (createdNewExam) {
+        await adminSupabase.from("examene").delete().eq("id", examenId)
+      }
+      throw new Error(insertError.message)
+    }
   }
 
   revalidatePath("/admin")
@@ -283,5 +353,158 @@ export async function importExamFromExcel(formData: FormData) {
     examenId,
     insertedCount: rowsToInsert.length,
     skippedRows: parsed.skippedRows,
+    duplicateCount,
+    createdNewExam,
   }
+}
+
+export async function updateExam(formData: FormData) {
+  await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
+
+  const examId = Number(formData.get("examId"))
+  if (!Number.isFinite(examId) || examId <= 0) {
+    throw new Error("ID-ul examenului este invalid.")
+  }
+
+  const { data: existingExam, error: existingExamError } = await adminSupabase
+    .from("examene")
+    .select("id, nume_examen")
+    .eq("id", examId)
+    .maybeSingle()
+
+  if (existingExamError || !existingExam) {
+    throw new Error(existingExamError?.message ?? "Examenul selectat nu există.")
+  }
+
+  const nextExamName = String(formData.get("examName") ?? "").trim()
+  const file = getOptionalFileFromFormData(formData)
+
+  if (!nextExamName && !file) {
+    throw new Error("Nu există modificări de salvat.")
+  }
+
+  if (nextExamName && nextExamName !== String(existingExam.nume_examen ?? "").trim()) {
+    const { error: updateNameError } = await adminSupabase
+      .from("examene")
+      .update({ nume_examen: nextExamName })
+      .eq("id", examId)
+
+    if (updateNameError) {
+      throw new Error("Nu s-a putut actualiza numele examenului.")
+    }
+  }
+
+  let insertedCount = 0
+  let duplicateCount = 0
+  let skippedRows = 0
+
+  if (file) {
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const parsed = await parseExamWorkbook(buffer)
+    skippedRows = parsed.skippedRows
+
+    const { data: existingQuestionRows, error: existingQuestionRowsError } = await adminSupabase
+      .from("intrebari")
+      .select("intrebare_text")
+      .eq("examen_id", examId)
+
+    if (existingQuestionRowsError) {
+      throw new Error("Nu s-au putut încărca întrebările existente pentru verificarea duplicatelor.")
+    }
+
+    const knownQuestionKeys = new Set(
+      (existingQuestionRows ?? [])
+        .map((row) => normalizeQuestionKey(String(row.intrebare_text ?? "")))
+        .filter(Boolean)
+    )
+
+    const rowsToInsert = []
+    for (const row of parsed.questions) {
+      const key = normalizeQuestionKey(row.intrebare_text)
+      if (!key || knownQuestionKeys.has(key)) {
+        duplicateCount += 1
+        continue
+      }
+      knownQuestionKeys.add(key)
+      rowsToInsert.push({
+        examen_id: examId,
+        ...row,
+      })
+    }
+
+    if (rowsToInsert.length > 0) {
+      const { error: insertError } = await adminSupabase.from("intrebari").insert(rowsToInsert)
+      if (insertError) {
+        throw new Error("Nu s-au putut salva întrebările noi din fișier.")
+      }
+      insertedCount = rowsToInsert.length
+    }
+  }
+
+  revalidatePath("/admin")
+
+  return {
+    examId,
+    updatedName: nextExamName || String(existingExam.nume_examen ?? ""),
+    insertedCount,
+    duplicateCount,
+    skippedRows,
+  }
+}
+
+export async function deleteExam(examId: number) {
+  await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
+
+  if (!Number.isFinite(examId) || examId <= 0) {
+    throw new Error("ID-ul examenului este invalid.")
+  }
+
+  const { data: exam, error: readExamError } = await adminSupabase
+    .from("examene")
+    .select("id")
+    .eq("id", examId)
+    .maybeSingle()
+
+  if (readExamError) {
+    throw new Error("Nu s-a putut verifica examenul selectat.")
+  }
+  if (!exam) {
+    throw new Error("Examenul nu există sau a fost deja șters.")
+  }
+
+  // Fallback cleanup for schemas where CASCADE is not yet configured.
+  for (const tableName of [
+    "status_invatare",
+    "bookmarks",
+    "acces_examene",
+    "intrebari_salvate",
+    "progres_utilizator",
+    "intrebari",
+  ]) {
+    const { error: cleanupError } = await adminSupabase
+      .from(tableName)
+      .delete()
+      .eq("examen_id", examId)
+
+    if (cleanupError) {
+      if ((cleanupError as { code?: string }).code === "42P01") {
+        continue
+      }
+      throw new Error(`Nu s-au putut șterge datele dependente (${tableName}).`)
+    }
+  }
+
+  const { error } = await adminSupabase.from("examene").delete().eq("id", examId)
+  if (error) {
+    if ((error as { code?: string }).code === "23503") {
+      throw new Error(
+        "Examenul nu poate fi șters deoarece există date dependente. Verifică relațiile FK sau rulează migrarea de CASCADE."
+      )
+    }
+    throw new Error("Ștergerea examenului a eșuat. Încearcă din nou.")
+  }
+
+  revalidatePath("/admin")
 }
