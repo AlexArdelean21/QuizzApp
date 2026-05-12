@@ -24,10 +24,11 @@ const DEFAULT_QUESTION_COUNT = 25
 const MIN_PRACTICE_QUESTIONS = 5
 const MAX_PRACTICE_QUESTIONS = 100
 const SIMULATION_PASS_THRESHOLD = 18
-const EXAM_DISPLAY_NAME = "ANRE grad III-IVAB"
+const SELECTED_EXAM_STORAGE_KEY = "quiz.selectedExamId"
 
 type QuizMode = "simulation" | "practice"
 type QuizStatus = "setup" | "loading" | "quiz" | "results" | "error"
+type ExamOption = { id: number; name: string }
 
 type ResultStats = {
   mode: QuizMode
@@ -59,7 +60,7 @@ export function QuizInterface() {
   const [isPracticeSourceOpen, setIsPracticeSourceOpen] = useState(false)
   const [isExamDropdownOpen, setIsExamDropdownOpen] = useState(false)
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null)
-  const [examOptions, setExamOptions] = useState<number[]>([])
+  const [examOptions, setExamOptions] = useState<ExamOption[]>([])
   const [availablePracticeCount, setAvailablePracticeCount] = useState(0)
   const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTION_COUNT)
   const [isAvailabilityLoading, setIsAvailabilityLoading] = useState(false)
@@ -139,17 +140,43 @@ export function QuizInterface() {
       }
 
       const examIds = await fetchDistinctExamIds(supabase, activeUserId)
-      setExamOptions(examIds)
 
       if (examIds.length === 0) {
+        setExamOptions([])
         setSelectedExamId(null)
         setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
         setAvailablePracticeCount(0)
         return
       }
 
-      const nextExamId = examIds[0]
+      const { data: examRows, error: examRowsError } = await supabase
+        .from("examene")
+        .select("id, nume_examen")
+        .in("id", examIds)
+      const nameById = new Map<number, string>(
+        !examRowsError
+          ? (examRows ?? []).map((row) => [
+              Number(row.id),
+              String(row.nume_examen ?? "").trim() || `Examen ${row.id}`,
+            ])
+          : []
+      )
+      const options = examIds.map((id) => ({
+        id,
+        name: nameById.get(id) ?? `Examen ${id}`,
+      }))
+      setExamOptions(options)
+
+      const persistedExamId = Number(window.localStorage.getItem(SELECTED_EXAM_STORAGE_KEY))
+      const hasPersistedExam =
+        Number.isFinite(persistedExamId) &&
+        persistedExamId > 0 &&
+        options.some((option) => option.id === persistedExamId)
+
+      const nextExamId = hasPersistedExam ? persistedExamId : options[0].id
+
       setSelectedExamId(nextExamId)
+      window.localStorage.setItem(SELECTED_EXAM_STORAGE_KEY, String(nextExamId))
       await refreshAvailablePracticeCount(practiceSource, nextExamId, activeUserId)
     }
     void bootstrap().catch((error) => {
@@ -158,7 +185,12 @@ export function QuizInterface() {
       setExamOptions([])
       setAvailablePracticeCount(0)
     })
-  }, [supabase, refreshAvailablePracticeCount, practiceSource])
+  }, [supabase, refreshAvailablePracticeCount])
+
+  useEffect(() => {
+    if (selectedExamId == null) return
+    window.localStorage.setItem(SELECTED_EXAM_STORAGE_KEY, String(selectedExamId))
+  }, [selectedExamId])
 
   useEffect(() => {
     if (!isPracticeMode || examOptions.length === 0 || selectedExamId == null) return
@@ -278,6 +310,11 @@ export function QuizInterface() {
     void loadQuiz(mode, selectedCount, selectedExamId, practiceSource, userId)
   }
 
+  const handleExamChange = useCallback((examId: number) => {
+    setSelectedExamId(examId)
+    setIsExamDropdownOpen(false)
+  }, [])
+
   const resetToSetup = () => {
     finishedRef.current = false
     setQuestions([])
@@ -359,6 +396,7 @@ export function QuizInterface() {
     const sliderValue = Math.max(1, Math.min(questionCount, sliderMax))
     const hasSingleExamOption = examOptions.length === 1
     const noExamAccess = examOptions.length === 0
+    const selectedExamName = examOptions.find((exam) => exam.id === selectedExamId)?.name ?? null
     return (
       <div className="min-h-screen bg-background">
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
@@ -376,7 +414,7 @@ export function QuizInterface() {
                   </p>
                 ) : hasSingleExamOption ? (
                   <p className="mt-2 rounded-lg border border-border/70 bg-card/60 px-3 py-2 text-sm text-muted-foreground">
-                    Examen selectat: {EXAM_DISPLAY_NAME}
+                    Examen selectat: {selectedExamName ?? examOptions[0]?.name ?? "Examen indisponibil"}
                   </p>
                 ) : (
                   <div className="relative mt-2" ref={examDropdownRef}>
@@ -388,7 +426,7 @@ export function QuizInterface() {
                       onClick={() => setIsExamDropdownOpen((prev) => !prev)}
                       className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:hover:border-slate-700"
                     >
-                      <span>{selectedExamId ? `${EXAM_DISPLAY_NAME} (ID ${selectedExamId})` : "Selectează examen"}</span>
+                      <span>{selectedExamName ?? "Selectează examen"}</span>
                       <ChevronDown
                         className={`size-4 text-slate-500 transition-transform dark:text-slate-400 ${isExamDropdownOpen ? "rotate-180" : ""}`}
                       />
@@ -400,21 +438,18 @@ export function QuizInterface() {
                         aria-labelledby="exam-id"
                         className="absolute z-[70] mt-1 w-full min-w-[14rem] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900"
                       >
-                        {examOptions.map((examId) => (
+                        {examOptions.map((exam) => (
                           <button
-                            key={examId}
+                            key={exam.id}
                             type="button"
-                            onClick={() => {
-                              setSelectedExamId(examId)
-                              setIsExamDropdownOpen(false)
-                            }}
+                            onClick={() => handleExamChange(exam.id)}
                             className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                              selectedExamId === examId
+                              selectedExamId === exam.id
                                 ? "bg-blue-50 text-blue-700 dark:bg-slate-800 dark:text-blue-300"
                                 : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                             }`}
                           >
-                            {EXAM_DISPLAY_NAME} (ID {examId})
+                            {exam.name}
                           </button>
                         ))}
                       </div>
