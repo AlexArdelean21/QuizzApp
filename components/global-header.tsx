@@ -6,8 +6,10 @@ import { LogOut, X } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { ThemeToggler } from "@/components/ThemeToggler"
+import { useTrackActivity } from "@/hooks/use-track-activity"
 
 export function GlobalHeader() {
+  useTrackActivity()
   const pathname = usePathname()
   const [showExit, setShowExit] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)

@@ -80,6 +80,30 @@ type UpdateSingleQuestionPayload = {
   raspuns_corect: "a" | "b" | "c"
 }
 
+export async function updateUserActivity() {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return { updated: false, reason: "unauthenticated" as const }
+  }
+
+  const adminSupabase = getAdminServiceClient()
+  const { error } = await adminSupabase
+    .from("profiles")
+    .update({ ultima_activitate: new Date().toISOString() })
+    .eq("id", user.id)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return { updated: true }
+}
+
 function cellValueToText(value: unknown) {
   if (value == null) return ""
   if (typeof value === "string") return value
@@ -193,7 +217,7 @@ function normalizeQuestionKey(text: string) {
 export async function getAdminStats(): Promise<AdminStats> {
   await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const sevenDaysAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [usersResult, examsResult, questionsResult, activeUsersResult] = await Promise.all([
     adminSupabase.from("profiles").select("id", { count: "exact", head: true }),
@@ -202,7 +226,8 @@ export async function getAdminStats(): Promise<AdminStats> {
     adminSupabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
-      .gte("ultima_activitate", sevenDaysAgo),
+      .not("ultima_activitate", "is", null)
+      .gte("ultima_activitate", sevenDaysAgoIso),
   ])
 
   if (usersResult.error || examsResult.error || questionsResult.error || activeUsersResult.error) {
