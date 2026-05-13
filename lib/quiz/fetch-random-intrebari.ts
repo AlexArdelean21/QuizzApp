@@ -272,17 +272,8 @@ export async function updateLearningStatus(
   const { userId, examenId, intrebareId, isCorrect } = params
   if (!userId || !isValidExamId(examenId) || !intrebareId) return
 
-  const { data: existing, error: readError } = await supabase
-    .from("status_invatare")
-    .select("raspunsuri_corecte_consecutive")
-    .eq("user_id", userId)
-    .eq("examen_id", examenId)
-    .eq("intrebare_id", intrebareId)
-    .maybeSingle()
-
-  if (readError) throw new Error(readError.message)
-
   if (!isCorrect) {
+    // Keep only wrong answers in the "wrong questions" pool.
     const { error } = await supabase.from("status_invatare").upsert(
       {
         user_id: userId,
@@ -297,18 +288,15 @@ export async function updateLearningStatus(
     return
   }
 
-  const current = Number(existing?.raspunsuri_corecte_consecutive ?? 0)
-  const nextConsecutive = current + 1
-  const { error } = await supabase.from("status_invatare").upsert(
-    {
-      user_id: userId,
-      examen_id: examenId,
-      intrebare_id: intrebareId,
-      este_gresita: nextConsecutive < 2,
-      raspunsuri_corecte_consecutive: nextConsecutive,
-    },
-    { onConflict: "user_id,intrebare_id,examen_id" }
-  )
+  // A correct answer means the user has learned the question:
+  // remove it from the wrong pool if it exists.
+  const { error } = await supabase
+    .from("status_invatare")
+    .delete()
+    .eq("user_id", userId)
+    .eq("examen_id", examenId)
+    .eq("intrebare_id", intrebareId)
+
   if (error) throw new Error(error.message)
 }
 
