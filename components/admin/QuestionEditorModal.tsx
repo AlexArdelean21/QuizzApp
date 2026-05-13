@@ -25,6 +25,14 @@ type QuestionDraft = {
   raspuns_corect: "a" | "b" | "c"
 }
 
+const normalizeText = (text: string) =>
+  text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ș/g, "s")
+    .replace(/ț/g, "t")
+
 function toDraft(question: AdminQuestionRow): QuestionDraft {
   return {
     intrebare_text: question.intrebare_text,
@@ -65,9 +73,15 @@ export function QuestionEditorModal({
   }, [examId])
 
   const filteredQuestions = useMemo(() => {
-    const needle = searchTerm.trim().toLowerCase()
+    const needle = normalizeText(searchTerm.trim())
     if (!needle) return questions
-    return questions.filter((question) => question.intrebare_text.toLowerCase().includes(needle))
+
+    return questions.filter((question) => {
+      const haystack = normalizeText(
+        `${question.intrebare_text} ${question.varianta_a} ${question.varianta_b} ${question.varianta_c}`
+      )
+      return haystack.includes(needle)
+    })
   }, [questions, searchTerm])
 
   const closeEditor = () => {
