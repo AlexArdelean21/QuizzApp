@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { AnalyticsOverview } from "@/components/admin/AnalyticsOverview"
 import { UserManagement } from "@/components/admin/UserManagement"
 import { ExamManagement } from "@/components/admin/ExamManagement"
 import { type UserProfileRow, type ExamOption } from "@/components/admin/UsersTable"
@@ -92,6 +93,7 @@ export default async function AdminPage() {
           </p>
         ) : (
           <div className="mt-6 grid gap-6">
+            <AnalyticsOverview />
             <ExamManagement examene={examene} />
             <UserManagement
               profiles={profiles}

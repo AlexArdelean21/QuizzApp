@@ -10,6 +10,7 @@ import {
   updateExam,
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
+import { QuestionEditorModal } from "@/components/admin/QuestionEditorModal"
 import type { ExamOption } from "@/components/admin/UsersTable"
 
 type ToastState = {
@@ -35,6 +36,7 @@ export function ExamManagement({ examene }: ExamManagementProps) {
   const [editFile, setEditFile] = useState<File | null>(null)
   const [deleteTargetExam, setDeleteTargetExam] = useState<ExamOption | null>(null)
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("")
+  const [questionEditorExam, setQuestionEditorExam] = useState<ExamOption | null>(null)
 
   const [previewing, startPreviewTransition] = useTransition()
   const [creating, startCreateTransition] = useTransition()
@@ -278,6 +280,15 @@ export function ExamManagement({ examene }: ExamManagementProps) {
                       <Button
                         type="button"
                         size="sm"
+                        variant="outline"
+                        onClick={() => setQuestionEditorExam(exam)}
+                        disabled={isBusy}
+                      >
+                        Editează Întrebări
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
                         variant="secondary"
                         onClick={() => handleOpenUpdateModal(exam)}
                         disabled={isBusy}
@@ -423,6 +434,15 @@ export function ExamManagement({ examene }: ExamManagementProps) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {questionEditorExam ? (
+        <QuestionEditorModal
+          examId={questionEditorExam.id}
+          examName={questionEditorExam.nume_examen}
+          onClose={() => setQuestionEditorExam(null)}
+          onRefresh={() => router.refresh()}
+        />
       ) : null}
     </section>
   )

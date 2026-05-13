@@ -56,6 +56,30 @@ type ParseExamResult = {
   skippedRows: number
 }
 
+export type AdminStats = {
+  totalUtilizatori: number
+  totalExamene: number
+  totalIntrebari: number
+  utilizatoriActivi7Zile: number
+}
+
+export type AdminQuestionRow = {
+  id: number
+  intrebare_text: string
+  varianta_a: string
+  varianta_b: string
+  varianta_c: string
+  raspuns_corect: "a" | "b" | "c"
+}
+
+type UpdateSingleQuestionPayload = {
+  intrebare_text: string
+  varianta_a: string
+  varianta_b: string
+  varianta_c: string
+  raspuns_corect: "a" | "b" | "c"
+}
+
 function cellValueToText(value: unknown) {
   if (value == null) return ""
   if (typeof value === "string") return value
@@ -164,6 +188,120 @@ function getOptionalFileFromFormData(formData: FormData) {
 
 function normalizeQuestionKey(text: string) {
   return normalizeText(text).toLowerCase()
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [usersResult, examsResult, questionsResult, activeUsersResult] = await Promise.all([
+    adminSupabase.from("profiles").select("id", { count: "exact", head: true }),
+    adminSupabase.from("examene").select("id", { count: "exact", head: true }),
+    adminSupabase.from("intrebari").select("id", { count: "exact", head: true }),
+    adminSupabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .gte("ultima_activitate", sevenDaysAgo),
+  ])
+
+  if (usersResult.error || examsResult.error || questionsResult.error || activeUsersResult.error) {
+    throw new Error(
+      usersResult.error?.message ||
+        examsResult.error?.message ||
+        questionsResult.error?.message ||
+        activeUsersResult.error?.message ||
+        "Nu s-au putut încărca statisticile admin."
+    )
+  }
+
+  return {
+    totalUtilizatori: usersResult.count ?? 0,
+    totalExamene: examsResult.count ?? 0,
+    totalIntrebari: questionsResult.count ?? 0,
+    utilizatoriActivi7Zile: activeUsersResult.count ?? 0,
+  }
+}
+
+export async function getQuestionsForExam(examId: number): Promise<AdminQuestionRow[]> {
+  await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
+
+  if (!Number.isFinite(examId) || examId <= 0) {
+    throw new Error("Examen invalid.")
+  }
+
+  const { data, error } = await adminSupabase
+    .from("intrebari")
+    .select("id, intrebare_text, varianta_a, varianta_b, varianta_c, raspuns_corect")
+    .eq("examen_id", examId)
+    .order("id", { ascending: true })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return (data ?? []).map((row) => ({
+    id: Number(row.id),
+    intrebare_text: String(row.intrebare_text ?? ""),
+    varianta_a: String(row.varianta_a ?? ""),
+    varianta_b: String(row.varianta_b ?? ""),
+    varianta_c: String(row.varianta_c ?? ""),
+    raspuns_corect: String(row.raspuns_corect ?? "a").toLowerCase() as "a" | "b" | "c",
+  }))
+}
+
+export async function updateSingleQuestion(id: number, data: UpdateSingleQuestionPayload) {
+  await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
+
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("ID-ul întrebării este invalid.")
+  }
+
+  const payload: UpdateSingleQuestionPayload = {
+    intrebare_text: String(data.intrebare_text ?? "").trim(),
+    varianta_a: String(data.varianta_a ?? "").trim(),
+    varianta_b: String(data.varianta_b ?? "").trim(),
+    varianta_c: String(data.varianta_c ?? "").trim(),
+    raspuns_corect: String(data.raspuns_corect ?? "")
+      .trim()
+      .toLowerCase() as "a" | "b" | "c",
+  }
+
+  if (
+    !payload.intrebare_text ||
+    !payload.varianta_a ||
+    !payload.varianta_b ||
+    !payload.varianta_c ||
+    !["a", "b", "c"].includes(payload.raspuns_corect)
+  ) {
+    throw new Error("Datele întrebării sunt incomplete sau invalide.")
+  }
+
+  const { error } = await adminSupabase.from("intrebari").update(payload).eq("id", id)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath("/admin")
+}
+
+export async function deleteSingleQuestion(id: number) {
+  await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
+
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("ID-ul întrebării este invalid.")
+  }
+
+  const { error } = await adminSupabase.from("intrebari").delete().eq("id", id)
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath("/admin")
 }
 
 export async function deleteUser(userId: string) {
