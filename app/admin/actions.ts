@@ -214,6 +214,71 @@ function normalizeQuestionKey(text: string) {
   return normalizeText(text).toLowerCase()
 }
 
+async function getExistingQuestionKeysForExam(
+  adminSupabase: ReturnType<typeof getAdminServiceClient>,
+  examId: number
+) {
+  if (!Number.isFinite(examId) || examId <= 0) {
+    throw new Error("ID-ul examenului este invalid pentru verificarea duplicatelor.")
+  }
+
+  const { data, error } = await adminSupabase
+    .from("intrebari")
+    .select("intrebare_text")
+    .eq("examen_id", examId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return new Set(
+    (data ?? [])
+      .map((row) => normalizeQuestionKey(String(row.intrebare_text ?? "")))
+      .filter(Boolean)
+  )
+}
+
+function buildScopedQuestionInsertRows(
+  questions: ParsedExamQuestion[],
+  examId: number,
+  existingQuestionKeysInExam: Set<string>
+) {
+  const rowsToInsert: Array<{ examen_id: number } & ParsedExamQuestion> = []
+  let duplicateCount = 0
+
+  for (const row of questions) {
+    const key = normalizeQuestionKey(row.intrebare_text)
+    if (!key || existingQuestionKeysInExam.has(key)) {
+      duplicateCount += 1
+      continue
+    }
+
+    existingQuestionKeysInExam.add(key)
+    rowsToInsert.push({
+      examen_id: examId,
+      ...row,
+    })
+  }
+
+  return { rowsToInsert, duplicateCount }
+}
+
+async function insertQuestionsInBatches(
+  adminSupabase: ReturnType<typeof getAdminServiceClient>,
+  rowsToInsert: Array<{ examen_id: number } & ParsedExamQuestion>,
+  batchSize: number = 100
+) {
+  if (rowsToInsert.length === 0) return
+
+  for (let offset = 0; offset < rowsToInsert.length; offset += batchSize) {
+    const chunk = rowsToInsert.slice(offset, offset + batchSize)
+    const { error } = await adminSupabase.from("intrebari").insert(chunk)
+    if (error) {
+      throw new Error(error.message)
+    }
+  }
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
   await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
@@ -466,47 +531,30 @@ export async function importExamFromExcel(formData: FormData) {
     examenId = Number(createdExam.id)
   }
 
-  const { data: existingQuestionRows, error: existingQuestionRowsError } = await adminSupabase
-    .from("intrebari")
-    .select("intrebare_text")
-    .eq("examen_id", examenId)
-
-  if (existingQuestionRowsError) {
+  let knownQuestionKeys: Set<string>
+  try {
+    knownQuestionKeys = await getExistingQuestionKeysForExam(adminSupabase, examenId)
+  } catch (error) {
     if (createdNewExam) {
       await adminSupabase.from("examene").delete().eq("id", examenId)
     }
-    throw new Error(existingQuestionRowsError.message)
+    throw error
   }
 
-  const knownQuestionKeys = new Set(
-    (existingQuestionRows ?? [])
-      .map((row) => normalizeQuestionKey(String(row.intrebare_text ?? "")))
-      .filter(Boolean)
+  const { rowsToInsert, duplicateCount } = buildScopedQuestionInsertRows(
+    parsed.questions,
+    examenId,
+    knownQuestionKeys
   )
 
-  const rowsToInsert = []
-  let duplicateCount = 0
-
-  for (const row of parsed.questions) {
-    const key = normalizeQuestionKey(row.intrebare_text)
-    if (!key || knownQuestionKeys.has(key)) {
-      duplicateCount += 1
-      continue
-    }
-    knownQuestionKeys.add(key)
-    rowsToInsert.push({
-      examen_id: examenId,
-      ...row,
-    })
-  }
-
   if (rowsToInsert.length > 0) {
-    const { error: insertError } = await adminSupabase.from("intrebari").insert(rowsToInsert)
-    if (insertError) {
+    try {
+      await insertQuestionsInBatches(adminSupabase, rowsToInsert, 100)
+    } catch (error) {
       if (createdNewExam) {
         await adminSupabase.from("examene").delete().eq("id", examenId)
       }
-      throw new Error(insertError.message)
+      throw error
     }
   }
 
@@ -567,38 +615,25 @@ export async function updateExam(formData: FormData) {
     const parsed = await parseExamWorkbook(buffer)
     skippedRows = parsed.skippedRows
 
-    const { data: existingQuestionRows, error: existingQuestionRowsError } = await adminSupabase
-      .from("intrebari")
-      .select("intrebare_text")
-      .eq("examen_id", examId)
-
-    if (existingQuestionRowsError) {
+    let knownQuestionKeys: Set<string>
+    try {
+      knownQuestionKeys = await getExistingQuestionKeysForExam(adminSupabase, examId)
+    } catch {
       throw new Error("Nu s-au putut încărca întrebările existente pentru verificarea duplicatelor.")
     }
 
-    const knownQuestionKeys = new Set(
-      (existingQuestionRows ?? [])
-        .map((row) => normalizeQuestionKey(String(row.intrebare_text ?? "")))
-        .filter(Boolean)
+    const questionInsertResult = buildScopedQuestionInsertRows(
+      parsed.questions,
+      examId,
+      knownQuestionKeys
     )
-
-    const rowsToInsert = []
-    for (const row of parsed.questions) {
-      const key = normalizeQuestionKey(row.intrebare_text)
-      if (!key || knownQuestionKeys.has(key)) {
-        duplicateCount += 1
-        continue
-      }
-      knownQuestionKeys.add(key)
-      rowsToInsert.push({
-        examen_id: examId,
-        ...row,
-      })
-    }
+    const rowsToInsert = questionInsertResult.rowsToInsert
+    duplicateCount = questionInsertResult.duplicateCount
 
     if (rowsToInsert.length > 0) {
-      const { error: insertError } = await adminSupabase.from("intrebari").insert(rowsToInsert)
-      if (insertError) {
+      try {
+        await insertQuestionsInBatches(adminSupabase, rowsToInsert, 100)
+      } catch {
         throw new Error("Nu s-au putut salva întrebările noi din fișier.")
       }
       insertedCount = rowsToInsert.length

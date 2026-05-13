@@ -26,7 +26,7 @@ export default async function AdminPage() {
     })
 
     const nowIso = new Date().toISOString()
-    const [profilesResult, exameneResult, accessResult, questionsResult] = await Promise.all([
+    const [profilesResult, exameneResult, accessResult] = await Promise.all([
       adminSupabase
         .from("profiles")
         .select("id, nume, email, role")
@@ -37,45 +37,61 @@ export default async function AdminPage() {
         .from("acces_examene")
         .select("user_id, examen_id, data_expirare")
         .gt("data_expirare", nowIso),
-      adminSupabase.from("intrebari").select("examen_id"),
     ])
 
-    if (profilesResult.error || exameneResult.error || accessResult.error || questionsResult.error) {
+    if (profilesResult.error || exameneResult.error || accessResult.error) {
       fetchError =
         profilesResult.error?.message ||
         exameneResult.error?.message ||
         accessResult.error?.message ||
-        questionsResult.error?.message ||
         "A apărut o eroare la încărcarea datelor admin."
     } else {
       profiles = profilesResult.data ?? []
+      const examRows = exameneResult.data ?? []
       const questionCountByExamId = new Map<number, number>()
-      for (const row of questionsResult.data ?? []) {
-        const examId = Number(row.examen_id)
-        questionCountByExamId.set(examId, (questionCountByExamId.get(examId) ?? 0) + 1)
-      }
 
-      examene = (exameneResult.data ?? []).map((exam) => ({
-        id: Number(exam.id),
-        nume_examen: exam.nume_examen ?? `Examen ${exam.id}`,
-        question_count: questionCountByExamId.get(Number(exam.id)) ?? 0,
-      }))
+      const countResults = await Promise.all(
+        examRows.map(async (exam) => {
+          const examId = Number(exam.id)
+          const result = await adminSupabase
+            .from("intrebari")
+            .select("id", { count: "exact", head: true })
+            .eq("examen_id", examId)
 
-      const examNameById = new Map<number, string>(
-        examene.map((exam) => [exam.id, exam.nume_examen])
+          return { examId, result }
+        })
       )
 
-      for (const row of accessResult.data ?? []) {
-        const userId = String(row.user_id)
-        const examId = Number(row.examen_id)
-        const examName = examNameById.get(examId) ?? `Examen ${examId}`
-
-        if (!activeAccessByUser[userId]) {
-          activeAccessByUser[userId] = []
+      const countError = countResults.find(({ result }) => result.error)?.result.error
+      if (countError) {
+        fetchError = countError.message
+      } else {
+        for (const { examId, result } of countResults) {
+          questionCountByExamId.set(examId, result.count ?? 0)
         }
 
-        if (!activeAccessByUser[userId].includes(examName)) {
-          activeAccessByUser[userId].push(examName)
+        examene = examRows.map((exam) => ({
+          id: Number(exam.id),
+          nume_examen: exam.nume_examen ?? `Examen ${exam.id}`,
+          question_count: questionCountByExamId.get(Number(exam.id)) ?? 0,
+        }))
+
+        const examNameById = new Map<number, string>(
+          examene.map((exam) => [exam.id, exam.nume_examen])
+        )
+
+        for (const row of accessResult.data ?? []) {
+          const userId = String(row.user_id)
+          const examId = Number(row.examen_id)
+          const examName = examNameById.get(examId) ?? `Examen ${examId}`
+
+          if (!activeAccessByUser[userId]) {
+            activeAccessByUser[userId] = []
+          }
+
+          if (!activeAccessByUser[userId].includes(examName)) {
+            activeAccessByUser[userId].push(examName)
+          }
         }
       }
     }
