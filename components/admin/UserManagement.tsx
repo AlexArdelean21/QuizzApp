@@ -16,6 +16,7 @@ type UserManagementProps = {
   activeAccessByUser: Record<string, string[]>
   isSuperAdmin: boolean
   currentUserId: string
+  scopedOrgId?: string | null
 }
 
 export function UserManagement({
@@ -25,6 +26,7 @@ export function UserManagement({
   activeAccessByUser,
   isSuperAdmin,
   currentUserId,
+  scopedOrgId,
 }: UserManagementProps) {
   const [searchTerm, setSearchTerm] = useState("")
 
@@ -48,7 +50,8 @@ export function UserManagement({
             User Management
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Administrează utilizatorii, rolurile și accesul la examene.
+            Administrează utilizatorii și accesul la examene.
+            {!isSuperAdmin && " Modificările de rol se fac din panoul Super Admin."}
           </p>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -60,7 +63,7 @@ export function UserManagement({
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
         <input
           type="text"
-          placeholder="Caută după email, nume sau organizație..."
+          placeholder="Caută după email sau nume..."
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
           className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500"
@@ -74,6 +77,7 @@ export function UserManagement({
         activeAccessByUser={activeAccessByUser}
         isSuperAdmin={isSuperAdmin}
         currentUserId={currentUserId}
+        orgFilter={scopedOrgId}
       />
     </section>
   )

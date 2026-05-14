@@ -401,8 +401,13 @@ export function OrganizationManagement({
                           onChange={(event) =>
                             handleAssignOrg(user.id, event.target.value ? event.target.value : null)
                           }
-                          disabled={updatingUser}
-                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          disabled={updatingUser || user.role === "super_admin"}
+                          title={
+                            user.role === "super_admin"
+                              ? "Super admin nu poate fi mutat în altă organizație."
+                              : undefined
+                          }
+                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <option value="">— Fără organizație —</option>
                           {organizations.map((org) => (
@@ -421,7 +426,17 @@ export function OrganizationManagement({
                             type="button"
                             size="sm"
                             variant="outline"
-                            disabled={updatingUser || user.role === "org_admin" || !user.org_id}
+                            disabled={
+                              updatingUser ||
+                              user.role === "org_admin" ||
+                              user.role === "super_admin" ||
+                              !user.org_id
+                            }
+                            title={
+                              user.role === "super_admin"
+                                ? "Super admin nu poate fi modificat."
+                                : undefined
+                            }
                             onClick={() => handleSetRole(user.id, "org_admin")}
                           >
                             Setează Org Admin
@@ -430,7 +445,16 @@ export function OrganizationManagement({
                             type="button"
                             size="sm"
                             variant="secondary"
-                            disabled={updatingUser || user.role === "user"}
+                            disabled={
+                              updatingUser ||
+                              user.role === "user" ||
+                              user.role === "super_admin"
+                            }
+                            title={
+                              user.role === "super_admin"
+                                ? "Super admin nu poate fi modificat."
+                                : undefined
+                            }
                             onClick={() => handleSetRole(user.id, "user")}
                           >
                             Resetează la user

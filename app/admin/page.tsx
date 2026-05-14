@@ -5,11 +5,19 @@ import { normalizeRole, type AppRole } from "@/lib/auth/roles"
 import { AnalyticsOverview } from "@/components/admin/AnalyticsOverview"
 import { UserManagement } from "@/components/admin/UserManagement"
 import { ExamManagement } from "@/components/admin/ExamManagement"
+import { AdminDashboardShell } from "@/components/admin/AdminDashboardShell"
+import type { OrgStat } from "@/components/admin/OrgBreakdown"
 import type {
   AdminExamRow,
   AdminOrganizationRow,
   AdminUserRow,
 } from "@/app/admin/actions"
+
+const ROLE_SORT_RANK: Record<AppRole, number> = {
+  super_admin: 0,
+  org_admin: 1,
+  user: 2,
+}
 
 export const dynamic = "force-dynamic"
 
@@ -44,6 +52,8 @@ export default async function AdminPage() {
   let organizations: AdminOrganizationRow[] = []
   const activeAccessByUser: Record<string, string[]> = {}
   let fetchError: string | null = null
+  let orgStats: OrgStat[] = []
+  let unassignedCount = 0
 
   if (!supabaseUrl || !serviceRoleKey) {
     fetchError = "Lipsesc variabilele de mediu pentru acces admin la Supabase."
@@ -117,6 +127,15 @@ export default async function AdminPage() {
         }
       })
 
+      // Deterministic initial sort: role rank → org name → email
+      profiles.sort((a, b) => {
+        const rankDiff = ROLE_SORT_RANK[a.role] - ROLE_SORT_RANK[b.role]
+        if (rankDiff !== 0) return rankDiff
+        const orgDiff = (a.org_nume ?? "").localeCompare(b.org_nume ?? "")
+        if (orgDiff !== 0) return orgDiff
+        return (a.email ?? "").localeCompare(b.email ?? "")
+      })
+
       const examRows = exameneResult.data ?? []
       const questionCountByExamId = new Map<number, number>()
 
@@ -154,6 +173,35 @@ export default async function AdminPage() {
             durata_minute: Number(exam.durata_minute ?? 30),
           }
         })
+
+        // Compute per-org breakdown for the super_admin bento (from already-loaded data)
+        if (context.isSuperAdmin) {
+          const orgUserCount = new Map<string, number>()
+          const orgAdminCount = new Map<string, number>()
+          const orgExamCount = new Map<string, number>()
+          for (const p of profiles) {
+            if (p.org_id) {
+              orgUserCount.set(p.org_id, (orgUserCount.get(p.org_id) ?? 0) + 1)
+              if (p.role === "org_admin") {
+                orgAdminCount.set(p.org_id, (orgAdminCount.get(p.org_id) ?? 0) + 1)
+              }
+            } else {
+              unassignedCount += 1
+            }
+          }
+          for (const e of examene) {
+            if (e.org_id) {
+              orgExamCount.set(e.org_id, (orgExamCount.get(e.org_id) ?? 0) + 1)
+            }
+          }
+          orgStats = organizations.map((org) => ({
+            orgId: org.id,
+            orgNume: org.nume,
+            userCount: orgUserCount.get(org.id) ?? 0,
+            examCount: orgExamCount.get(org.id) ?? 0,
+            orgAdminCount: orgAdminCount.get(org.id) ?? 0,
+          }))
+        }
 
         const examIds = examene.map((exam) => exam.id)
         const examNameById = new Map<number, string>(
@@ -207,20 +255,36 @@ export default async function AdminPage() {
       ) : (
         <div className="flex flex-col gap-6">
           <AnalyticsOverview scopeLabel={scopeLabel} />
-          <ExamManagement
-            examene={examene}
-            organizations={organizations}
-            isSuperAdmin={context.isSuperAdmin}
-            defaultOrgId={context.scopedOrgId}
-          />
-          <UserManagement
-            profiles={profiles}
-            examene={examene}
-            organizations={organizations}
-            activeAccessByUser={activeAccessByUser}
-            isSuperAdmin={context.isSuperAdmin}
-            currentUserId={context.userId}
-          />
+
+          {context.isSuperAdmin ? (
+            <AdminDashboardShell
+              profiles={profiles}
+              examene={examene}
+              organizations={organizations}
+              activeAccessByUser={activeAccessByUser}
+              orgStats={orgStats}
+              unassignedCount={unassignedCount}
+              currentUserId={context.userId}
+            />
+          ) : (
+            <>
+              <ExamManagement
+                examene={examene}
+                organizations={organizations}
+                isSuperAdmin={false}
+                defaultOrgId={context.scopedOrgId}
+              />
+              <UserManagement
+                profiles={profiles}
+                examene={examene}
+                organizations={organizations}
+                activeAccessByUser={activeAccessByUser}
+                isSuperAdmin={false}
+                currentUserId={context.userId}
+                scopedOrgId={context.scopedOrgId}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
