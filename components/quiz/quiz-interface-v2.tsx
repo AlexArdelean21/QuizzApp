@@ -9,6 +9,9 @@ import {
   fetchAccessibleExams,
   fetchQuestionsBySource,
   getAvailableQuestionCount,
+  recordAnswerHistory,
+  recordPracticeSession,
+  recordSimulationSession,
   toggleBookmarkForQuestion,
   updateLearningStatus,
 } from "@/lib/quiz/fetch-random-intrebari"
@@ -86,6 +89,8 @@ export function QuizInterface() {
   const questionsRef = useRef(questions)
   const answersRef = useRef(answers)
   const modeRef = useRef(mode)
+  const userIdRef = useRef<string | null>(userId)
+  const selectedExamIdRef = useRef<number | null>(selectedExamId)
   const startedAtRef = useRef<number>(0)
   const finishedRef = useRef(false)
   const practiceSourceDropdownRef = useRef<HTMLDivElement | null>(null)
@@ -94,6 +99,14 @@ export function QuizInterface() {
   questionsRef.current = questions
   answersRef.current = answers
   modeRef.current = mode
+
+  // userId and selectedExamId are only read from refs inside async callbacks
+  // (finalizeQuiz, handleSelectAnswer), so syncing in an effect is enough and
+  // avoids writing to refs during render.
+  useEffect(() => {
+    userIdRef.current = userId
+    selectedExamIdRef.current = selectedExamId
+  }, [userId, selectedExamId])
 
   const isPracticeMode = mode === "practice"
   const hasAnsweredCurrent = selectedAnswer !== null
@@ -111,10 +124,40 @@ export function QuizInterface() {
     const currentMode = modeRef.current
     const correct = qs.reduce((acc, q) => acc + (ans[q.id] === q.correctAnswer ? 1 : 0), 0)
     const wrong = Math.max(0, qs.length - correct)
-    const elapsedMs = Date.now() - startedAtRef.current
+    const finishedAt = Date.now()
+    const elapsedMs = finishedAt - startedAtRef.current
     setResultStats({ mode: currentMode, correct, wrong, total: qs.length, elapsedMs, timedOut: opts.timedOut })
     setStatus("results")
-  }, [])
+
+    // Persist finished simulations → evolution chart / sim-only counters.
+    if (currentMode === "simulation" && userIdRef.current && selectedExamIdRef.current != null && qs.length > 0) {
+      void recordSimulationSession(supabase, {
+        userId: userIdRef.current,
+        examenId: selectedExamIdRef.current,
+        startedAt: new Date(startedAtRef.current),
+        finishedAt: new Date(finishedAt),
+        correctCount: correct,
+        totalQuestions: qs.length,
+        timedOut: opts.timedOut,
+      }).catch((error) => {
+        console.error("Failed to record simulation session:", error)
+      })
+    }
+
+    // Practice sessions → contribute to global study time stats only.
+    if (currentMode === "practice" && userIdRef.current && selectedExamIdRef.current != null && qs.length > 0) {
+      void recordPracticeSession(supabase, {
+        userId: userIdRef.current,
+        examenId: selectedExamIdRef.current,
+        startedAt: new Date(startedAtRef.current),
+        finishedAt: new Date(finishedAt),
+        correctCount: correct,
+        totalQuestions: qs.length,
+      }).catch((error) => {
+        console.error("Failed to record practice session:", error)
+      })
+    }
+  }, [supabase])
 
   const refreshAvailablePracticeCount = useCallback(async (nextSource: PracticeSource, nextExamId: number, nextUserId: string | null) => {
     if (!nextUserId) {
@@ -265,7 +308,20 @@ export function QuizInterface() {
     setSelectedAnswer(answerId)
     setAnswers((prev) => ({ ...prev, [currentQuestion.id]: answerId }))
     if (userId && selectedExamId != null) {
-      void updateLearningStatus(supabase, { userId, examenId: selectedExamId, intrebareId: currentQuestion.id, isCorrect: answerId === currentQuestion.correctAnswer })
+      const isCorrect = answerId === currentQuestion.correctAnswer
+      void updateLearningStatus(supabase, { userId, examenId: selectedExamId, intrebareId: currentQuestion.id, isCorrect })
+      // Append every attempt to the answer history so the statistics page can
+      // compute mastery + per-question last attempt. Failures are non-fatal:
+      // the quiz UX must keep working even if the log write fails.
+      void recordAnswerHistory(supabase, {
+        userId,
+        examenId: selectedExamId,
+        intrebareId: currentQuestion.id,
+        isCorrect,
+        mode,
+      }).catch((error) => {
+        console.error("Failed to record answer history:", error)
+      })
     }
   }
 

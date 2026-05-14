@@ -283,6 +283,100 @@ export async function toggleBookmarkForQuestion(
   if (error) throw new Error(error.message)
 }
 
+export async function recordAnswerHistory(
+  supabase: SupabaseClient,
+  params: {
+    userId: string
+    examenId: number
+    intrebareId: string
+    isCorrect: boolean
+    mode: "simulation" | "practice"
+  }
+) {
+  const { userId, examenId, intrebareId, isCorrect, mode } = params
+  if (!userId || !isValidExamId(examenId) || !intrebareId) return
+  const intrebareIdNum = Number(intrebareId)
+  if (!Number.isFinite(intrebareIdNum) || intrebareIdNum <= 0) return
+
+  // We append a row per attempt rather than upserting so the table doubles as
+  // a time series. Statistics derive "last attempt" with DISTINCT ON / window
+  // functions on (user_id, intrebare_id) ordered by data_raspuns DESC.
+  const { error } = await supabase.from("istoric_raspunsuri").insert({
+    user_id: userId,
+    examen_id: examenId,
+    intrebare_id: intrebareIdNum,
+    corect: isCorrect,
+    mod: mode === "simulation" ? "simulare" : "practica",
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function recordSimulationSession(
+  supabase: SupabaseClient,
+  params: {
+    userId: string
+    examenId: number
+    startedAt: Date
+    finishedAt: Date
+    correctCount: number
+    totalQuestions: number
+    timedOut: boolean
+  }
+) {
+  const { userId, examenId, startedAt, finishedAt, correctCount, totalQuestions, timedOut } = params
+  if (!userId || !isValidExamId(examenId)) return
+
+  const safeTotal = Math.max(0, totalQuestions)
+  const safeCorrect = Math.max(0, Math.min(correctCount, safeTotal))
+  const durataSec = Math.max(0, Math.round((finishedAt.getTime() - startedAt.getTime()) / 1000))
+  const scorProcent = safeTotal > 0 ? Math.round((safeCorrect / safeTotal) * 10000) / 100 : 0
+
+  const { error } = await supabase.from("sesiuni_simulare").insert({
+    user_id: userId,
+    examen_id: examenId,
+    started_at: startedAt.toISOString(),
+    finished_at: finishedAt.toISOString(),
+    durata_secunde: durataSec,
+    raspunsuri_corecte: safeCorrect,
+    total_intrebari: safeTotal,
+    scor_procent: scorProcent,
+    finalizat: true,
+    timed_out: timedOut,
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function recordPracticeSession(
+  supabase: SupabaseClient,
+  params: {
+    userId: string
+    examenId: number
+    startedAt: Date
+    finishedAt: Date
+    correctCount: number
+    totalQuestions: number
+  }
+) {
+  const { userId, examenId, startedAt, finishedAt, correctCount, totalQuestions } = params
+  if (!userId || !isValidExamId(examenId)) return
+
+  const safeTotal = Math.max(0, totalQuestions)
+  const safeCorrect = Math.max(0, Math.min(correctCount, safeTotal))
+  const durataSec = Math.max(0, Math.round((finishedAt.getTime() - startedAt.getTime()) / 1000))
+
+  const { error } = await supabase.from("sesiuni_practica").insert({
+    user_id: userId,
+    examen_id: examenId,
+    started_at: startedAt.toISOString(),
+    finished_at: finishedAt.toISOString(),
+    durata_secunde: durataSec,
+    raspunsuri_corecte: safeCorrect,
+    total_intrebari: safeTotal,
+    finalizat: true,
+  })
+  if (error) throw new Error(error.message)
+}
+
 export async function updateLearningStatus(
   supabase: SupabaseClient,
   params: { userId: string; examenId: number; intrebareId: string; isCorrect: boolean }

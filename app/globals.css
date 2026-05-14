@@ -117,3 +117,62 @@ body {
 .modal-card-animate {
   animation: modal-pop-in 0.22s ease-out;
 }
+
+/* Layered "premium" background used on dashboard surfaces.
+   Layer 1: solid base color comes from the body's bg-* utility.
+   Layer 2: a very subtle dot grid — dots instead of lines so it doesn't
+            read as a math notebook in light mode. Opacity is intentionally
+            low (~2% light, ~4% dark) so the dots are perceived as texture,
+            not a foreground pattern.
+   Layer 3: oversized blurred radial gradients ("aura") rendered as
+            separate fixed divs in `app/layout.tsx` — they pick up
+            `--aura-color-*` from here so they stay theme-aware. */
+:root {
+  --grid-dot: rgb(15 23 42 / 0.05);
+  --aura-color-1: rgb(59 130 246 / 0.18);
+  --aura-color-2: rgb(217 70 239 / 0.12);
+  --aura-color-3: rgb(34 211 238 / 0.10);
+}
+
+.dark {
+  --grid-dot: rgb(148 163 184 / 0.08);
+  --aura-color-1: rgb(59 130 246 / 0.22);
+  --aura-color-2: rgb(217 70 239 / 0.18);
+  --aura-color-3: rgb(34 211 238 / 0.14);
+}
+
+.bg-fine-grid {
+  background-image: radial-gradient(circle, var(--grid-dot) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+}
+
+@keyframes mastery-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgb(34 197 94 / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgb(34 197 94 / 0);
+  }
+}
+
+.mastery-pulse {
+  animation: mastery-pulse 2.4s ease-out infinite;
+}
+
+@keyframes aura-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -1%, 0) scale(1.04);
+  }
+}
+
+.aura-drift-slow {
+  animation: aura-drift 18s ease-in-out infinite;
+}
+
+.aura-drift-slower {
+  animation: aura-drift 26s ease-in-out infinite reverse;
+}
