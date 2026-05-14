@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
+import { isAdminRole } from "@/lib/auth/roles"
 
 type LoginBody = {
   email?: string
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   const response = NextResponse.json({
-    redirectTo: profile?.role === "admin" ? "/admin" : "/",
+    redirectTo: isAdminRole(profile?.role) ? "/admin" : "/",
   })
   pendingCookies.forEach(({ name, value }) => {
     response.cookies.set(name, value, cookieOptions)

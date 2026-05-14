@@ -1,6 +1,8 @@
 import { ReactNode } from "react"
 import { redirect } from "next/navigation"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { getAdminContext } from "@/lib/auth/admin-context"
+import { AdminLayoutShell } from "@/components/admin/AdminSidebar"
 
 type AdminLayoutProps = {
   children: ReactNode
@@ -17,16 +19,20 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     redirect("/login")
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  // If profile lookup fails, treat as non-admin.
-  if (profileError || profile?.role !== "admin") {
+  const context = await getAdminContext()
+  if (!context) {
     redirect("/")
   }
 
-  return <>{children}</>
+  return (
+    <AdminLayoutShell
+      email={context.email}
+      fullName={context.fullName}
+      role={context.role}
+      orgName={context.orgName}
+      isSuperAdmin={context.isSuperAdmin}
+    >
+      {children}
+    </AdminLayoutShell>
+  )
 }

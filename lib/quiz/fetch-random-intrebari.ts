@@ -1,5 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { IntrebareRow, QuizQuestion, AnswerId, PracticeSource } from "./types"
+import { isAdminRole, isSuperAdminRole, normalizeRole } from "@/lib/auth/roles"
+import type {
+  AnswerId,
+  ExamSummary,
+  IntrebareRow,
+  PracticeSource,
+  QuizQuestion,
+} from "./types"
 
 function normalizeCorrect(raw: string | null | undefined): AnswerId | null {
   if (raw == null) return null
@@ -135,89 +142,88 @@ export async function fetchQuestionsBySource(
   return shuffleInPlaceAndLimit(mapped, count)
 }
 
-export async function fetchDistinctExamIds(
+function isValidId(value: unknown): value is number {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0
+}
+
+function mapExamSummary(row: {
+  id: unknown
+  nume_examen?: unknown
+  prag_trecere?: unknown
+  intrebari_simulare?: unknown
+  variante_raspuns?: unknown
+  durata_minute?: unknown
+  timp_alocat_minute?: unknown
+}): ExamSummary | null {
+  const id = Number(row.id)
+  if (!Number.isFinite(id) || id <= 0) return null
+  const fallbackDuration = Number(row.timp_alocat_minute)
+  const durata = Number(row.durata_minute)
+  return {
+    id,
+    name: String(row.nume_examen ?? `Examen ${id}`),
+    pragTrecere: Number(row.prag_trecere) > 0 ? Number(row.prag_trecere) : 18,
+    intrebariSimulare: Number(row.intrebari_simulare) > 0 ? Number(row.intrebari_simulare) : 25,
+    varianteRaspuns: Number(row.variante_raspuns) > 0 ? Number(row.variante_raspuns) : 3,
+    durataMinute: Number.isFinite(durata) && durata > 0
+      ? durata
+      : Number.isFinite(fallbackDuration) && fallbackDuration > 0
+        ? fallbackDuration
+        : 30,
+  }
+}
+
+export async function fetchAccessibleExams(
   supabase: SupabaseClient,
   userId: string
-): Promise<number[]> {
-  const normalizeExamIds = (rows: Array<{ id?: unknown; examen_id?: unknown }>) =>
-    rows
-      .map((row) => Number(row.id ?? row.examen_id))
-      .filter((id) => Number.isFinite(id) && id > 0)
-
-  const fetchAllExamIds = async () => {
-    const { data: examRows, error: examError } = await supabase
-      .from("examene")
-      .select("id")
-      .order("id", { ascending: true })
-
-    if (!examError) {
-      const ids = normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
-      if (ids.length === 0) {
-        console.error(
-          "Exam fetch returned empty. Check RLS policies on 'examene' and 'acces_examene' tables."
-        )
-      }
-      return ids
-    }
-
-    // Fallback when `examene` is blocked by RLS for clients.
-    const { data: questionRows, error: questionError } = await supabase
-      .from("intrebari")
-      .select("examen_id")
-
-    if (questionError) throw new Error(examError.message)
-    return [...new Set(normalizeExamIds((questionRows ?? []) as Array<{ examen_id?: unknown }>))]
-      .sort((a, b) => a - b)
-  }
-
-  const fetchExamIdsFromAllowed = async (allowedIds: number[]) => {
-    if (allowedIds.length === 0) return []
-    const { data: examRows, error: examError } = await supabase
-      .from("examene")
-      .select("id")
-      .in("id", allowedIds)
-      .order("id", { ascending: true })
-
-    if (!examError) {
-      const ids = normalizeExamIds((examRows ?? []) as Array<{ id?: unknown }>)
-      if (ids.length === 0) {
-        console.error(
-          "Exam fetch returned empty. Check RLS policies on 'examene' and 'acces_examene' tables."
-        )
-      }
-      return ids
-    }
-
-    // Fallback when `examene` is blocked by RLS for clients.
-    const { data: questionRows, error: questionError } = await supabase
-      .from("intrebari")
-      .select("examen_id")
-      .in("examen_id", allowedIds)
-
-    if (questionError) throw new Error(examError.message)
-    return [...new Set(normalizeExamIds((questionRows ?? []) as Array<{ examen_id?: unknown }>))]
-      .sort((a, b) => a - b)
-  }
+): Promise<ExamSummary[]> {
+  if (!userId) return []
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, org_id")
     .eq("id", userId)
     .maybeSingle()
 
   if (profileError) throw new Error(profileError.message)
-  const normalizedRole = String(profile?.role ?? "")
-    .trim()
-    .toLowerCase()
+  const role = normalizeRole(profile?.role)
+  const orgId = profile?.org_id ? String(profile.org_id) : null
 
-  if (normalizedRole === "admin") {
-    return fetchAllExamIds()
+  const selectColumns =
+    "id, nume_examen, prag_trecere, intrebari_simulare, variante_raspuns, durata_minute, timp_alocat_minute, org_id"
+
+  const orderById = { ascending: true } as const
+
+  const safeMap = (rows: Array<Record<string, unknown>>): ExamSummary[] =>
+    rows
+      .map((row) => mapExamSummary(row as Parameters<typeof mapExamSummary>[0]))
+      .filter((value): value is ExamSummary => value !== null)
+      // Deduplicate just in case the same exam appears twice via JOIN/in().
+      .reduce<ExamSummary[]>((acc, current) => {
+        if (!acc.some((exam) => exam.id === current.id)) acc.push(current)
+        return acc
+      }, [])
+      .sort((a, b) => a.id - b.id)
+
+  if (isSuperAdminRole(role)) {
+    const { data, error } = await supabase
+      .from("examene")
+      .select(selectColumns)
+      .order("id", orderById)
+    if (error) throw new Error(error.message)
+    return safeMap(((data ?? []) as Array<Record<string, unknown>>))
   }
 
-  if (normalizedRole !== "user") {
-    return []
+  if (isAdminRole(role)) {
+    let query = supabase.from("examene").select(selectColumns).order("id", orderById)
+    if (orgId) query = query.eq("org_id", orgId)
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return safeMap(((data ?? []) as Array<Record<string, unknown>>))
   }
 
+  // Regular user — restricted to non-expired entries from `acces_examene`.
   const nowIso = new Date().toISOString()
   const { data: accessRows, error: accessError } = await supabase
     .from("acces_examene")
@@ -226,15 +232,27 @@ export async function fetchDistinctExamIds(
     .gt("data_expirare", nowIso)
 
   if (accessError) throw new Error(accessError.message)
+  const accessIds = [
+    ...new Set((accessRows ?? []).map((row) => Number(row.examen_id)).filter(isValidId)),
+  ]
+  if (accessIds.length === 0) return []
 
-  const accessIds = [...new Set((accessRows ?? []).map((row) => Number(row.examen_id)))]
-    .filter((id) => Number.isFinite(id) && id > 0)
+  const { data, error } = await supabase
+    .from("examene")
+    .select(selectColumns)
+    .in("id", accessIds)
+    .order("id", orderById)
 
-  if (accessIds.length === 0) {
-    return []
-  }
+  if (error) throw new Error(error.message)
+  return safeMap(((data ?? []) as Array<Record<string, unknown>>))
+}
 
-  return fetchExamIdsFromAllowed(accessIds)
+export async function fetchDistinctExamIds(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<number[]> {
+  const exams = await fetchAccessibleExams(supabase, userId)
+  return exams.map((exam) => exam.id)
 }
 
 export async function toggleBookmarkForQuestion(

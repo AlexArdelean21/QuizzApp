@@ -6,6 +6,7 @@ import { LogOut, Menu, Moon, Sun, X } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useTrackActivity } from "@/hooks/use-track-activity"
+import { isAdminRole } from "@/lib/auth/roles"
 
 type Theme = "light" | "dark"
 
@@ -48,7 +49,7 @@ export function GlobalHeader() {
           return
         }
 
-        setIsAdmin(profile?.role === "admin")
+        setIsAdmin(isAdminRole(profile?.role))
       } catch {
         setIsAdmin(false)
       }
@@ -114,7 +115,7 @@ export function GlobalHeader() {
     window.dispatchEvent(new CustomEvent("quiz-exit-request"))
   }
 
-  if (isLoginRoute) {
+  if (isLoginRoute || isAdminRoute) {
     return null
   }
 

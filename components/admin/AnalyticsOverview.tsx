@@ -4,32 +4,46 @@ import { AdminRefreshButton } from "@/components/admin/AdminRefreshButton"
 
 const cards = [
   {
-    key: "totalUtilizatori",
-    title: "Total Utilizatori",
-    icon: Users,
-    accent: "text-blue-500",
-  },
-  {
     key: "totalExamene",
     title: "Total Examene",
+    description: "Examene active în platformă",
     icon: BookOpen,
-    accent: "text-violet-500",
+    accent: "from-blue-500/15 to-blue-500/0 text-blue-600 dark:text-blue-300",
+    iconBg: "bg-blue-500/15",
+  },
+  {
+    key: "utilizatoriActivi7Zile",
+    title: "Active Users (7 zile)",
+    description: "Utilizatori activi în ultima săptămână",
+    icon: Activity,
+    accent: "from-emerald-500/15 to-emerald-500/0 text-emerald-600 dark:text-emerald-300",
+    iconBg: "bg-emerald-500/15",
   },
   {
     key: "totalIntrebari",
     title: "Total Întrebări",
+    description: "Întrebări gestionate",
     icon: HelpCircle,
-    accent: "text-amber-500",
+    accent: "from-amber-500/15 to-amber-500/0 text-amber-600 dark:text-amber-300",
+    iconBg: "bg-amber-500/15",
   },
   {
-    key: "utilizatoriActivi7Zile",
-    title: "Utilizatori Activi (7 zile)",
-    icon: Activity,
-    accent: "text-emerald-500",
+    key: "totalUtilizatori",
+    title: "Total Utilizatori",
+    description: "Toți utilizatorii înregistrați",
+    icon: Users,
+    accent: "from-violet-500/15 to-violet-500/0 text-violet-600 dark:text-violet-300",
+    iconBg: "bg-violet-500/15",
   },
 ] as const
 
-export async function AnalyticsOverview() {
+type StatsCardKey = (typeof cards)[number]["key"]
+
+export async function AnalyticsOverview({
+  scopeLabel,
+}: {
+  scopeLabel?: string
+}) {
   const result = await getAdminStats()
     .then((stats) => ({ stats, error: null as string | null }))
     .catch((error: unknown) => ({
@@ -39,40 +53,57 @@ export async function AnalyticsOverview() {
 
   if (result.error || !result.stats) {
     return (
-      <section className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+      <section className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-600 dark:text-rose-300">
         {result.error}
       </section>
     )
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Analytics Overview</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Indicatori rapizi pentru utilizatori, examene și activitate recentă.
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Dashboard
+          </p>
+          <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">
+            Statistici generale
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {scopeLabel ?? "Indicatori rapizi pentru utilizatori, examene și activitate recentă."}
           </p>
         </div>
         <AdminRefreshButton />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => {
           const Icon = card.icon
-          const value = result.stats[card.key]
-
+          const value = result.stats[card.key as StatsCardKey]
           return (
-            <div
+            <article
               key={card.key}
-              className="rounded-lg border border-border bg-background/60 p-4 transition-colors hover:bg-background"
+              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
             >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground">{card.title}</p>
-                <Icon className={`size-4 ${card.accent}`} />
+              <div
+                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.accent} opacity-60 transition-opacity group-hover:opacity-100`}
+                aria-hidden="true"
+              />
+              <div className="relative flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    {card.title}
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold text-slate-900 tabular-nums dark:text-white">
+                    {value.toLocaleString("ro-RO")}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{card.description}</p>
+                </div>
+                <div className={`inline-flex size-10 items-center justify-center rounded-xl ${card.iconBg}`}>
+                  <Icon className="size-5 text-slate-700 dark:text-white" />
+                </div>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-            </div>
+            </article>
           )
         })}
       </div>

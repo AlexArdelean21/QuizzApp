@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@supabase/supabase-js"
 import ExcelJS from "exceljs"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import {
+  AdminAccessError,
+  requireAdminContext,
+  requireSuperAdminContext,
+  type AdminContext,
+} from "@/lib/auth/admin-context"
+import { isAdminRole, normalizeRole, type AppRole } from "@/lib/auth/roles"
 
 function getAdminServiceClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -21,25 +28,85 @@ function getAdminServiceClient() {
   })
 }
 
-async function assertAdminActor() {
-  const supabase = await createSupabaseServerClient()
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
+type AdminServiceClient = ReturnType<typeof getAdminServiceClient>
 
-  if (userError || !user) {
-    throw new Error("Neautorizat.")
+async function assertAdminActor(): Promise<AdminContext> {
+  try {
+    return await requireAdminContext()
+  } catch (error) {
+    if (error instanceof AdminAccessError) {
+      throw new Error(error.message)
+    }
+    throw error
   }
+}
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
+async function assertSuperAdminActor(): Promise<AdminContext> {
+  try {
+    return await requireSuperAdminContext()
+  } catch (error) {
+    if (error instanceof AdminAccessError) {
+      throw new Error(error.message)
+    }
+    throw error
+  }
+}
+
+async function ensureExamInScope(
+  adminSupabase: AdminServiceClient,
+  context: AdminContext,
+  examId: number
+): Promise<{ id: number; org_id: string | null }> {
+  const { data, error } = await adminSupabase
+    .from("examene")
+    .select("id, org_id")
+    .eq("id", examId)
     .maybeSingle()
 
-  if (profileError || profile?.role !== "admin") {
-    throw new Error("Acces interzis.")
+  if (error || !data) {
+    throw new Error(error?.message ?? "Examenul selectat nu există.")
+  }
+
+  if (context.scopedOrgId && data.org_id !== context.scopedOrgId) {
+    throw new Error("Nu ai voie să modifici examene din alte organizații.")
+  }
+
+  return { id: Number(data.id), org_id: data.org_id ? String(data.org_id) : null }
+}
+
+async function ensureUserInScope(
+  adminSupabase: AdminServiceClient,
+  context: AdminContext,
+  targetUserId: string
+): Promise<{ id: string; org_id: string | null; role: AppRole }> {
+  const { data, error } = await adminSupabase
+    .from("profiles")
+    .select("id, org_id, role")
+    .eq("id", targetUserId)
+    .maybeSingle()
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Utilizatorul nu a fost găsit.")
+  }
+
+  const targetRole = normalizeRole(data.role)
+  const targetOrgId = data.org_id ? String(data.org_id) : null
+
+  if (context.scopedOrgId) {
+    // org_admin sandbox: target MUST belong to the same org and CANNOT be
+    // a super_admin (they are invisible to org admins entirely).
+    if (targetOrgId !== context.scopedOrgId) {
+      throw new Error("Nu ai voie să gestionezi utilizatori din alte organizații.")
+    }
+    if (targetRole === "super_admin") {
+      throw new Error("Utilizatorul nu este disponibil.")
+    }
+  }
+
+  return {
+    id: String(data.id),
+    org_id: targetOrgId,
+    role: targetRole,
   }
 }
 
@@ -70,6 +137,42 @@ export type AdminQuestionRow = {
   varianta_b: string
   varianta_c: string
   raspuns_corect: "a" | "b" | "c"
+}
+
+export type AdminExamRow = {
+  id: number
+  nume_examen: string
+  org_id: string | null
+  org_nume: string | null
+  question_count: number
+  prag_trecere: number
+  intrebari_simulare: number
+  variante_raspuns: number
+  durata_minute: number
+}
+
+export type AdminOrganizationRow = {
+  id: string
+  nume: string
+  slug: string
+  created_at: string | null
+}
+
+export type AdminUserRow = {
+  id: string
+  email: string | null
+  nume: string | null
+  role: AppRole
+  org_id: string | null
+  org_nume: string | null
+}
+
+export type ExamRulesPayload = {
+  prag_trecere?: number
+  intrebari_simulare?: number
+  variante_raspuns?: number
+  durata_minute?: number
+  categorie?: string | null
 }
 
 type UpdateSingleQuestionPayload = {
@@ -163,7 +266,6 @@ async function parseExamWorkbook(buffer: Buffer): Promise<ParseExamResult> {
       const varianta_b = normalizeText(row.getCell(3).value)
       const varianta_c = normalizeText(row.getCell(4).value)
 
-      // Ignore fully empty or spacer rows.
       if (!intrebare_text && !varianta_a && !varianta_b && !varianta_c) {
         return
       }
@@ -215,7 +317,7 @@ function normalizeQuestionKey(text: string) {
 }
 
 async function getExistingQuestionKeysForExam(
-  adminSupabase: ReturnType<typeof getAdminServiceClient>,
+  adminSupabase: AdminServiceClient,
   examId: number
 ) {
   if (!Number.isFinite(examId) || examId <= 0) {
@@ -264,7 +366,7 @@ function buildScopedQuestionInsertRows(
 }
 
 async function insertQuestionsInBatches(
-  adminSupabase: ReturnType<typeof getAdminServiceClient>,
+  adminSupabase: AdminServiceClient,
   rowsToInsert: Array<{ examen_id: number } & ParsedExamQuestion>,
   batchSize: number = 100
 ) {
@@ -279,20 +381,69 @@ async function insertQuestionsInBatches(
   }
 }
 
+async function loadAccessibleExamIds(
+  adminSupabase: AdminServiceClient,
+  context: AdminContext
+): Promise<number[]> {
+  let query = adminSupabase.from("examene").select("id")
+  if (context.scopedOrgId) {
+    query = query.eq("org_id", context.scopedOrgId)
+  }
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  return (data ?? [])
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
   const sevenDaysAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const orgFilter = context.scopedOrgId
 
-  const [usersResult, examsResult, questionsResult, activeUsersResult] = await Promise.all([
-    adminSupabase.from("profiles").select("id", { count: "exact", head: true }),
-    adminSupabase.from("examene").select("id", { count: "exact", head: true }),
-    adminSupabase.from("intrebari").select("id", { count: "exact", head: true }),
-    adminSupabase
+  const accessibleExamIds = await loadAccessibleExamIds(adminSupabase, context)
+
+  // org_admin counts must never include super_admins or unassigned users.
+  const buildUsersQuery = () => {
+    let q = adminSupabase.from("profiles").select("id", { count: "exact", head: true })
+    if (orgFilter) {
+      q = q.eq("org_id", orgFilter).neq("role", "super_admin")
+    }
+    return q
+  }
+  const buildExamsQuery = () => {
+    let q = adminSupabase.from("examene").select("id", { count: "exact", head: true })
+    if (orgFilter) q = q.eq("org_id", orgFilter)
+    return q
+  }
+  const buildQuestionsQuery = () => {
+    const q = adminSupabase.from("intrebari").select("id", { count: "exact", head: true })
+    if (orgFilter && accessibleExamIds.length === 0) {
+      return q.eq("examen_id", -1)
+    }
+    if (orgFilter) {
+      return q.in("examen_id", accessibleExamIds)
+    }
+    return q
+  }
+  const buildActiveUsersQuery = () => {
+    let q = adminSupabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .not("ultima_activitate", "is", null)
-      .gte("ultima_activitate", sevenDaysAgoIso),
+      .gte("ultima_activitate", sevenDaysAgoIso)
+    if (orgFilter) {
+      q = q.eq("org_id", orgFilter).neq("role", "super_admin")
+    }
+    return q
+  }
+
+  const [usersResult, examsResult, questionsResult, activeUsersResult] = await Promise.all([
+    buildUsersQuery(),
+    buildExamsQuery(),
+    buildQuestionsQuery(),
+    buildActiveUsersQuery(),
   ])
 
   if (usersResult.error || examsResult.error || questionsResult.error || activeUsersResult.error) {
@@ -314,12 +465,14 @@ export async function getAdminStats(): Promise<AdminStats> {
 }
 
 export async function getQuestionsForExam(examId: number): Promise<AdminQuestionRow[]> {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
 
   if (!Number.isFinite(examId) || examId <= 0) {
     throw new Error("Examen invalid.")
   }
+
+  await ensureExamInScope(adminSupabase, context, examId)
 
   const { data, error } = await adminSupabase
     .from("intrebari")
@@ -342,12 +495,22 @@ export async function getQuestionsForExam(examId: number): Promise<AdminQuestion
 }
 
 export async function updateSingleQuestion(id: number, data: UpdateSingleQuestionPayload) {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
 
   if (!Number.isFinite(id) || id <= 0) {
     throw new Error("ID-ul întrebării este invalid.")
   }
+
+  const { data: questionRow, error: questionError } = await adminSupabase
+    .from("intrebari")
+    .select("examen_id")
+    .eq("id", id)
+    .maybeSingle()
+  if (questionError || !questionRow) {
+    throw new Error(questionError?.message ?? "Întrebarea nu există.")
+  }
+  await ensureExamInScope(adminSupabase, context, Number(questionRow.examen_id))
 
   const payload: UpdateSingleQuestionPayload = {
     intrebare_text: String(data.intrebare_text ?? "").trim(),
@@ -379,12 +542,22 @@ export async function updateSingleQuestion(id: number, data: UpdateSingleQuestio
 }
 
 export async function deleteSingleQuestion(id: number) {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
 
   if (!Number.isFinite(id) || id <= 0) {
     throw new Error("ID-ul întrebării este invalid.")
   }
+
+  const { data: questionRow, error: questionError } = await adminSupabase
+    .from("intrebari")
+    .select("examen_id")
+    .eq("id", id)
+    .maybeSingle()
+  if (questionError || !questionRow) {
+    throw new Error(questionError?.message ?? "Întrebarea nu există.")
+  }
+  await ensureExamInScope(adminSupabase, context, Number(questionRow.examen_id))
 
   const { error } = await adminSupabase.from("intrebari").delete().eq("id", id)
   if (error) {
@@ -395,13 +568,24 @@ export async function deleteSingleQuestion(id: number) {
 }
 
 export async function deleteUser(userId: string) {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
+
+  const target = await ensureUserInScope(adminSupabase, context, userId)
+  if (target.id === context.userId) {
+    throw new Error("Nu te poți șterge pe tine însuți.")
+  }
+  if (target.role === "super_admin" && !context.isSuperAdmin) {
+    throw new Error("Doar super admin poate șterge un super admin.")
+  }
+  // Org admins cannot remove their peers — only super_admin can demote/remove org_admins.
+  if (target.role === "org_admin" && !context.isSuperAdmin) {
+    throw new Error("Doar super admin poate șterge un org admin.")
+  }
 
   const { error: deleteAuthError } = await adminSupabase.auth.admin.deleteUser(userId)
 
   if (deleteAuthError) {
-    // Fallback cleanup if foreign-key or trigger constraints block auth deletion.
     const { error: profileDeleteError } = await adminSupabase
       .from("profiles")
       .delete()
@@ -425,8 +609,11 @@ export async function grantExamAccess(
   examId: number,
   days: number = 30
 ) {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
+
+  await ensureExamInScope(adminSupabase, context, examId)
+  await ensureUserInScope(adminSupabase, context, userId)
 
   const expireDate = new Date()
   expireDate.setDate(expireDate.getDate() + days)
@@ -483,12 +670,13 @@ export async function previewExamImport(formData: FormData) {
 }
 
 export async function importExamFromExcel(formData: FormData) {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
 
   const existingExamenIdRaw = Number(formData.get("existingExamenId"))
   const hasExistingExamenId = Number.isFinite(existingExamenIdRaw) && existingExamenIdRaw > 0
   const examName = String(formData.get("examName") ?? "").trim()
+  const explicitOrgId = String(formData.get("orgId") ?? "").trim() || null
 
   const file = getFileFromFormData(formData)
   const buffer = Buffer.from(await file.arrayBuffer())
@@ -503,23 +691,24 @@ export async function importExamFromExcel(formData: FormData) {
 
   if (hasExistingExamenId) {
     examenId = existingExamenIdRaw
-    const { data: existingExam, error: existingExamError } = await adminSupabase
-      .from("examene")
-      .select("id")
-      .eq("id", examenId)
-      .maybeSingle()
-
-    if (existingExamError || !existingExam) {
-      throw new Error(existingExamError?.message ?? "Examenul selectat nu există.")
-    }
+    await ensureExamInScope(adminSupabase, context, examenId)
   } else {
     if (!examName) {
       throw new Error("Numele examenului este obligatoriu.")
     }
 
+    let targetOrgId: string | null = context.scopedOrgId
+    if (context.isSuperAdmin) {
+      targetOrgId = explicitOrgId ?? null
+    }
+
+    if (!targetOrgId && !context.isSuperAdmin) {
+      throw new Error("Contul tău nu este asociat unei organizații.")
+    }
+
     const { data: createdExam, error: createExamError } = await adminSupabase
       .from("examene")
-      .insert({ nume_examen: examName })
+      .insert({ nume_examen: examName, org_id: targetOrgId })
       .select("id")
       .single()
 
@@ -570,13 +759,15 @@ export async function importExamFromExcel(formData: FormData) {
 }
 
 export async function updateExam(formData: FormData) {
-  await assertAdminActor()
+  const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
 
   const examId = Number(formData.get("examId"))
   if (!Number.isFinite(examId) || examId <= 0) {
     throw new Error("ID-ul examenului este invalid.")
   }
+
+  await ensureExamInScope(adminSupabase, context, examId)
 
   const { data: existingExam, error: existingExamError } = await adminSupabase
     .from("examene")
@@ -651,35 +842,228 @@ export async function updateExam(formData: FormData) {
   }
 }
 
-export async function deleteExam(examId: number) {
-  try {
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-          detectSessionInUrl: false,
-        },
-      }
-    )
+export async function updateExamRules(examId: number, rules: ExamRulesPayload) {
+  const context = await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
 
-    // This single call will automatically trigger ON DELETE CASCADE in the database
-    const { error } = await adminSupabase
-      .from("examene")
-      .delete()
-      .eq("id", examId)
-
-    if (error) {
-      console.error("Supabase delete error:", error)
-      throw new Error("Eroare internă la ștergerea examenului.")
-    }
-
-    revalidatePath("/admin")
-    return { success: true }
-  } catch (error: any) {
-    console.error("Delete exam failed:", error)
-    throw new Error(error.message || "Nu am putut șterge examenul.")
+  if (!Number.isFinite(examId) || examId <= 0) {
+    throw new Error("ID-ul examenului este invalid.")
   }
+  await ensureExamInScope(adminSupabase, context, examId)
+
+  const update: Record<string, number | string | null> = {}
+
+  if (rules.prag_trecere != null) {
+    const value = Math.max(1, Math.floor(Number(rules.prag_trecere)))
+    if (!Number.isFinite(value)) throw new Error("Prag de trecere invalid.")
+    update.prag_trecere = value
+  }
+  if (rules.intrebari_simulare != null) {
+    const value = Math.max(1, Math.floor(Number(rules.intrebari_simulare)))
+    if (!Number.isFinite(value)) throw new Error("Număr de întrebări invalid.")
+    update.intrebari_simulare = value
+  }
+  if (rules.variante_raspuns != null) {
+    const value = Math.max(2, Math.min(6, Math.floor(Number(rules.variante_raspuns))))
+    if (!Number.isFinite(value)) throw new Error("Număr de variante invalid.")
+    update.variante_raspuns = value
+  }
+  if (rules.durata_minute != null) {
+    const value = Math.max(1, Math.floor(Number(rules.durata_minute)))
+    if (!Number.isFinite(value)) throw new Error("Durata invalidă.")
+    update.durata_minute = value
+  }
+  if (rules.categorie !== undefined) {
+    update.categorie = rules.categorie ? String(rules.categorie).trim() : null
+  }
+
+  if (Object.keys(update).length === 0) {
+    return { examId }
+  }
+
+  const { error } = await adminSupabase.from("examene").update(update).eq("id", examId)
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath("/admin")
+  return { examId }
+}
+
+export async function deleteExam(examId: number) {
+  const context = await assertAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  await ensureExamInScope(adminSupabase, context, examId)
+
+  const { error } = await adminSupabase
+    .from("examene")
+    .delete()
+    .eq("id", examId)
+
+  if (error) {
+    console.error("Supabase delete error:", error)
+    throw new Error("Eroare internă la ștergerea examenului.")
+  }
+
+  revalidatePath("/admin")
+  return { success: true }
+}
+
+export async function listOrganizations(): Promise<AdminOrganizationRow[]> {
+  await assertSuperAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  const { data, error } = await adminSupabase
+    .from("organizatii")
+    .select("id, nume, slug, created_at")
+    .order("nume", { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    nume: String(row.nume ?? ""),
+    slug: String(row.slug ?? ""),
+    created_at: row.created_at ? String(row.created_at) : null,
+  }))
+}
+
+function normalizeSlug(input: string): string {
+  return input
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+export async function createOrganization(input: { nume: string; slug?: string }) {
+  await assertSuperAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  const nume = String(input.nume ?? "").trim()
+  if (!nume) {
+    throw new Error("Numele organizației este obligatoriu.")
+  }
+  const slug = normalizeSlug(input.slug?.trim() || nume)
+  if (!slug) {
+    throw new Error("Slug-ul nu poate fi gol.")
+  }
+
+  const { data, error } = await adminSupabase
+    .from("organizatii")
+    .insert({ nume, slug })
+    .select("id, nume, slug, created_at")
+    .single()
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nu s-a putut crea organizația.")
+  }
+
+  revalidatePath("/admin/global")
+  return {
+    id: String(data.id),
+    nume: String(data.nume ?? ""),
+    slug: String(data.slug ?? ""),
+    created_at: data.created_at ? String(data.created_at) : null,
+  }
+}
+
+export async function updateOrganization(input: {
+  id: string
+  nume?: string
+  slug?: string
+}) {
+  await assertSuperAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  const id = String(input.id ?? "")
+  if (!id) throw new Error("ID-ul organizației lipsește.")
+  const update: Record<string, string> = {}
+  if (input.nume != null) {
+    const nume = String(input.nume).trim()
+    if (!nume) throw new Error("Numele organizației este obligatoriu.")
+    update.nume = nume
+  }
+  if (input.slug != null) {
+    const slug = normalizeSlug(String(input.slug))
+    if (!slug) throw new Error("Slug-ul nu poate fi gol.")
+    update.slug = slug
+  }
+  if (Object.keys(update).length === 0) return { id }
+  const { error } = await adminSupabase.from("organizatii").update(update).eq("id", id)
+  if (error) throw new Error(error.message)
+  revalidatePath("/admin/global")
+  return { id }
+}
+
+export async function deleteOrganization(id: string) {
+  await assertSuperAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  const orgId = String(id ?? "")
+  if (!orgId) throw new Error("ID-ul organizației lipsește.")
+
+  const [examsRefs, profileRefs] = await Promise.all([
+    adminSupabase.from("examene").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+    adminSupabase.from("profiles").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+  ])
+  if (examsRefs.error || profileRefs.error) {
+    throw new Error(
+      examsRefs.error?.message ||
+        profileRefs.error?.message ||
+        "Nu s-a putut verifica organizația."
+    )
+  }
+  if ((examsRefs.count ?? 0) > 0 || (profileRefs.count ?? 0) > 0) {
+    throw new Error(
+      "Organizația are utilizatori sau examene asociate. Elimină-i întâi pentru a o putea șterge."
+    )
+  }
+
+  const { error } = await adminSupabase.from("organizatii").delete().eq("id", orgId)
+  if (error) throw new Error(error.message)
+  revalidatePath("/admin/global")
+  return { success: true }
+}
+
+export async function assignUserToOrganization(input: {
+  userId: string
+  orgId: string | null
+}) {
+  await assertSuperAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  const userId = String(input.userId ?? "")
+  if (!userId) throw new Error("ID utilizator lipsește.")
+  const orgId = input.orgId ? String(input.orgId) : null
+  const { error } = await adminSupabase
+    .from("profiles")
+    .update({ org_id: orgId })
+    .eq("id", userId)
+  if (error) throw new Error(error.message)
+  revalidatePath("/admin/global")
+  revalidatePath("/admin")
+  return { userId, orgId }
+}
+
+export async function updateUserRole(input: { userId: string; role: AppRole }) {
+  // Role changes are a super_admin-only privilege. Org admins must never be
+  // able to escalate themselves or change peers — even within their org.
+  const context = await assertSuperAdminActor()
+  const adminSupabase = getAdminServiceClient()
+  const userId = String(input.userId ?? "")
+  const role = normalizeRole(input.role)
+  if (!userId) throw new Error("ID utilizator lipsește.")
+  if (!isAdminRole(role) && role !== "user") {
+    throw new Error("Rol invalid.")
+  }
+
+  const target = await ensureUserInScope(adminSupabase, context, userId)
+
+  if (target.id === context.userId) {
+    throw new Error("Nu îți poți modifica propriul rol.")
+  }
+  if (role === "org_admin" && !target.org_id) {
+    throw new Error("Atribuie întâi o organizație utilizatorului.")
+  }
+
+  const { error } = await adminSupabase.from("profiles").update({ role }).eq("id", userId)
+  if (error) throw new Error(error.message)
+  revalidatePath("/admin/global")
+  revalidatePath("/admin")
+  return { userId, role }
 }

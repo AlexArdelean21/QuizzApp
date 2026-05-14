@@ -2,16 +2,28 @@
 
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  FilePlus2,
+  Pencil,
+  Plus,
+  Search,
+  Settings2,
+  Trash2,
+  Upload,
+} from "lucide-react"
 import {
   deleteExam,
   importExamFromExcel,
   previewExamImport,
   updateExam,
+  updateExamRules,
+  type AdminExamRow,
+  type AdminOrganizationRow,
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
 import { QuestionEditorModal } from "@/components/admin/QuestionEditorModal"
-import type { ExamOption } from "@/components/admin/UsersTable"
 
 type ToastState = {
   type: "success" | "error"
@@ -19,33 +31,58 @@ type ToastState = {
 } | null
 
 type ExamManagementProps = {
-  examene: ExamOption[]
+  examene: AdminExamRow[]
+  organizations: AdminOrganizationRow[]
+  isSuperAdmin: boolean
+  defaultOrgId: string | null
 }
 
-export function ExamManagement({ examene }: ExamManagementProps) {
-  const router = useRouter()
-  const [isExpanded, setIsExpanded] = useState(true)
+const PAGE_SIZE = 10
 
+export function ExamManagement({
+  examene,
+  organizations,
+  isSuperAdmin,
+  defaultOrgId,
+}: ExamManagementProps) {
+  const router = useRouter()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [page, setPage] = useState(1)
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [examName, setExamName] = useState("")
   const [file, setFile] = useState<File | null>(null)
+  const [createOrgId, setCreateOrgId] = useState<string | null>(defaultOrgId)
   const [previewCount, setPreviewCount] = useState<number | null>(null)
   const [previewSkippedRows, setPreviewSkippedRows] = useState(0)
   const [toast, setToast] = useState<ToastState>(null)
-  const [editTargetExam, setEditTargetExam] = useState<ExamOption | null>(null)
+  const [editTargetExam, setEditTargetExam] = useState<AdminExamRow | null>(null)
   const [editExamName, setEditExamName] = useState("")
   const [editFile, setEditFile] = useState<File | null>(null)
-  const [deleteTargetExam, setDeleteTargetExam] = useState<ExamOption | null>(null)
+  const [deleteTargetExam, setDeleteTargetExam] = useState<AdminExamRow | null>(null)
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("")
-  const [questionEditorExam, setQuestionEditorExam] = useState<ExamOption | null>(null)
+  const [questionEditorExam, setQuestionEditorExam] = useState<AdminExamRow | null>(null)
+  const [rulesTargetExam, setRulesTargetExam] = useState<AdminExamRow | null>(null)
+  const [rulesDraft, setRulesDraft] = useState({
+    prag_trecere: 18,
+    intrebari_simulare: 25,
+    variante_raspuns: 3,
+    durata_minute: 30,
+  })
 
   const [previewing, startPreviewTransition] = useTransition()
   const [creating, startCreateTransition] = useTransition()
   const [savingUpdate, startSavingUpdateTransition] = useTransition()
   const [deleting, startDeleteTransition] = useTransition()
+  const [savingRules, startSavingRulesTransition] = useTransition()
 
-  const isBusy = previewing || creating || savingUpdate || deleting
+  const isBusy = previewing || creating || savingUpdate || deleting || savingRules
   const canPreview = Boolean(file) && !isBusy
-  const canCreate = Boolean(file) && examName.trim().length > 0 && previewCount !== null && !isBusy
+  const canCreate =
+    Boolean(file) &&
+    examName.trim().length > 0 &&
+    previewCount !== null &&
+    !isBusy &&
+    (isSuperAdmin ? Boolean(createOrgId) : true)
   const canSaveUpdate =
     editTargetExam != null &&
     !isBusy &&
@@ -58,8 +95,8 @@ export function ExamManagement({ examene }: ExamManagementProps) {
   const toastClasses = useMemo(() => {
     if (!toast) return ""
     return toast.type === "success"
-      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-200"
-      : "border-rose-500/40 bg-rose-500/15 text-rose-200"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
   }, [toast])
 
   const pushToast = (nextToast: Exclude<ToastState, null>) => {
@@ -69,16 +106,28 @@ export function ExamManagement({ examene }: ExamManagementProps) {
     }, 4000)
   }
 
-  const toFormData = (payload: { file: File; examName?: string; existingExamenId?: number }) => {
-    const formData = new FormData()
-    formData.set("file", payload.file)
-    if (payload.examName) {
-      formData.set("examName", payload.examName)
-    }
-    if (payload.existingExamenId) {
-      formData.set("existingExamenId", String(payload.existingExamenId))
-    }
-    return formData
+  const filteredExams = useMemo(() => {
+    const needle = searchTerm.trim().toLowerCase()
+    if (!needle) return examene
+    return examene.filter((exam) => {
+      const haystack = `${exam.nume_examen} ${exam.org_nume ?? ""}`.toLowerCase()
+      return haystack.includes(needle)
+    })
+  }, [examene, searchTerm])
+
+  const pageCount = Math.max(1, Math.ceil(filteredExams.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const pagedExams = filteredExams.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  )
+
+  const handleClosePopup = () => {
+    setShowCreateModal(false)
+    setExamName("")
+    setFile(null)
+    setPreviewCount(null)
+    setPreviewSkippedRows(0)
   }
 
   const handlePreview = () => {
@@ -86,7 +135,9 @@ export function ExamManagement({ examene }: ExamManagementProps) {
     startPreviewTransition(() => {
       void (async () => {
         try {
-          const result = await previewExamImport(toFormData({ file, examName }))
+          const formData = new FormData()
+          formData.set("file", file)
+          const result = await previewExamImport(formData)
           setPreviewCount(result.questionCount)
           setPreviewSkippedRows(result.skippedRows)
           pushToast({
@@ -111,11 +162,14 @@ export function ExamManagement({ examene }: ExamManagementProps) {
     startCreateTransition(() => {
       void (async () => {
         try {
-          const result = await importExamFromExcel(toFormData({ file, examName: examName.trim() }))
-          setExamName("")
-          setFile(null)
-          setPreviewCount(null)
-          setPreviewSkippedRows(0)
+          const formData = new FormData()
+          formData.set("file", file)
+          formData.set("examName", examName.trim())
+          if (isSuperAdmin && createOrgId) {
+            formData.set("orgId", createOrgId)
+          }
+          const result = await importExamFromExcel(formData)
+          handleClosePopup()
           pushToast({
             type: "success",
             message: `Examen creat cu ${result.insertedCount} întrebări (${result.duplicateCount} duplicate ignorate).`,
@@ -132,11 +186,45 @@ export function ExamManagement({ examene }: ExamManagementProps) {
     })
   }
 
-  const handleOpenUpdateModal = (exam: ExamOption) => {
+  const handleOpenUpdateModal = (exam: AdminExamRow) => {
     if (isBusy) return
     setEditTargetExam(exam)
     setEditExamName(exam.nume_examen)
     setEditFile(null)
+  }
+
+  const handleOpenRulesModal = (exam: AdminExamRow) => {
+    if (isBusy) return
+    setRulesTargetExam(exam)
+    setRulesDraft({
+      prag_trecere: exam.prag_trecere,
+      intrebari_simulare: exam.intrebari_simulare,
+      variante_raspuns: exam.variante_raspuns,
+      durata_minute: exam.durata_minute,
+    })
+  }
+
+  const handleSaveRules = () => {
+    if (!rulesTargetExam) return
+    startSavingRulesTransition(() => {
+      void (async () => {
+        try {
+          await updateExamRules(rulesTargetExam.id, rulesDraft)
+          pushToast({
+            type: "success",
+            message: "Regulile examenului au fost actualizate.",
+          })
+          setRulesTargetExam(null)
+          router.refresh()
+        } catch (error) {
+          console.error("Update rules failed:", error)
+          pushToast({
+            type: "error",
+            message: error instanceof Error ? error.message : "Nu s-au putut salva regulile.",
+          })
+        }
+      })()
+    })
   }
 
   const handleSaveUpdate = () => {
@@ -198,85 +286,107 @@ export function ExamManagement({ examene }: ExamManagementProps) {
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <button
-        type="button"
-        onClick={() => setIsExpanded((prev) => !prev)}
-        className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left transition-colors hover:bg-slate-100/70 dark:hover:bg-slate-900/70"
-      >
+    <section
+      id="examene"
+      className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 pb-4 dark:border-slate-800">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Exam Management</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Creează examene noi, actualizează întrebări și gestionează examenele existente.
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Exam Management
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Gestionează examenele, întrebările și regulile de simulare.
           </p>
         </div>
-        <ChevronDown
-          className={`size-5 text-muted-foreground transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
-        />
-      </button>
+        <Button
+          type="button"
+          onClick={() => setShowCreateModal(true)}
+          className="bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="mr-1 size-4" />
+          Examen nou
+        </Button>
+      </div>
 
-      <div
-        className={`grid transition-all duration-300 ${isExpanded ? "mt-4 grid-rows-[1fr] opacity-100" : "mt-0 grid-rows-[0fr] opacity-0"}`}
-      >
-        <div className="overflow-hidden">
-          <div className="mt-1 rounded-lg border border-border bg-card/80 p-4">
-            <h3 className="text-base font-semibold text-foreground">Creare examen nou</h3>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <input
-                value={examName}
-                onChange={(event) => setExamName(event.target.value)}
-                placeholder="Nume examen"
-                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
-                disabled={isBusy}
-              />
-              <input
-                key={file?.name ?? "empty"}
-                type="file"
-                accept=".xlsx"
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] ?? null
-                  setFile(nextFile)
-                  setPreviewCount(null)
-                  setPreviewSkippedRows(0)
-                }}
-                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:text-slate-100"
-                disabled={isBusy}
-              />
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={handlePreview} disabled={!canPreview}>
-                {previewing ? "Preview..." : "Preview"}
-              </Button>
-              <Button type="button" onClick={handleCreateExam} disabled={!canCreate}>
-                {creating ? "Import în curs..." : "Importă examen nou"}
-              </Button>
-            </div>
-            {previewCount !== null ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Întrebări detectate: {previewCount}
-                {previewSkippedRows > 0
-                  ? ` (${previewSkippedRows} rânduri ignorate: incomplete sau fără răspuns evidențiat).`
-                  : ""}
-              </p>
-            ) : null}
-          </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={searchTerm}
+            onChange={(event) => {
+              setSearchTerm(event.target.value)
+              setPage(1)
+            }}
+            placeholder="Caută examen..."
+            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500"
+          />
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {filteredExams.length} {filteredExams.length === 1 ? "examen" : "examene"}
+        </p>
+      </div>
 
-          <div className="mt-5 rounded-lg border border-border bg-card/80 p-4">
-            <h3 className="text-base font-semibold text-foreground">Examene existente</h3>
-            {examene.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">Nu există examene.</p>
+      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200/70 dark:border-slate-800">
+        <table className="min-w-full divide-y divide-slate-200/70 text-sm dark:divide-slate-800">
+          <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+            <tr>
+              <th className="px-4 py-3">Examen</th>
+              {isSuperAdmin && <th className="px-4 py-3">Organizație</th>}
+              <th className="px-4 py-3">Întrebări</th>
+              <th className="px-4 py-3">Reguli simulare</th>
+              <th className="px-4 py-3 text-right">Acțiuni</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200/70 bg-white dark:divide-slate-800 dark:bg-slate-900">
+            {pagedExams.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={isSuperAdmin ? 5 : 4}
+                  className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400"
+                >
+                  Nu există examene care să corespundă filtrului.
+                </td>
+              </tr>
             ) : (
-              <div className="mt-3 space-y-2">
-                {examene.map((exam) => (
-                  <div
-                    key={exam.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2"
-                  >
-                    <span className="text-sm text-slate-100">
-                      {exam.nume_examen}{" "}
-                      <span className="text-slate-500">- ({exam.question_count ?? 0} întrebări)</span>
+              pagedExams.map((exam) => (
+                <tr
+                  key={exam.id}
+                  className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60"
+                >
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      {exam.nume_examen}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">ID #{exam.id}</p>
+                  </td>
+                  {isSuperAdmin && (
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {exam.org_nume ?? "—"}
+                      </span>
+                    </td>
+                  )}
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                      {exam.question_count}
                     </span>
-                    <div className="flex items-center gap-2">
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex flex-wrap gap-1">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                        {exam.intrebari_simulare} întrebări
+                      </span>
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                        {exam.durata_minute} min
+                      </span>
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                        prag {exam.prag_trecere}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
                       <Button
                         type="button"
                         size="sm"
@@ -284,15 +394,27 @@ export function ExamManagement({ examene }: ExamManagementProps) {
                         onClick={() => setQuestionEditorExam(exam)}
                         disabled={isBusy}
                       >
-                        Editează Întrebări
+                        <Pencil className="mr-1 size-3.5" />
+                        Întrebări
                       </Button>
                       <Button
                         type="button"
                         size="sm"
                         variant="secondary"
+                        onClick={() => handleOpenRulesModal(exam)}
+                        disabled={isBusy}
+                      >
+                        <Settings2 className="mr-1 size-3.5" />
+                        Reguli
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
                         onClick={() => handleOpenUpdateModal(exam)}
                         disabled={isBusy}
                       >
+                        <Upload className="mr-1 size-3.5" />
                         Update
                       </Button>
                       <Button
@@ -305,27 +427,166 @@ export function ExamManagement({ examene }: ExamManagementProps) {
                         }}
                         disabled={isBusy}
                       >
+                        <Trash2 className="mr-1 size-3.5" />
                         Șterge
                       </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  </td>
+                </tr>
+              ))
             )}
-          </div>
-          {toast ? (
-            <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${toastClasses}`}>
-              {toast.message}
-            </div>
-          ) : null}
-        </div>
+          </tbody>
+        </table>
       </div>
+
+      {pageCount > 1 && (
+        <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <p>
+            Pagina {safePage} din {pageCount}
+          </p>
+          <div className="inline-flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={safePage <= 1}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+              disabled={safePage >= pageCount}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {toast ? (
+        <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${toastClasses}`}>
+          {toast.message}
+        </div>
+      ) : null}
+
+      {showCreateModal ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Închide popup"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={handleClosePopup}
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                  Creare examen nou
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Încarcă un Excel cu întrebări; răspunsurile corecte vor fi detectate din celulele evidențiate.
+                </p>
+              </div>
+              <FilePlus2 className="size-5 text-blue-500" />
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3">
+              <label className="block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Nume examen
+                <input
+                  value={examName}
+                  onChange={(event) => setExamName(event.target.value)}
+                  placeholder="Ex: Autorizare electrician..."
+                  disabled={isBusy}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                />
+              </label>
+
+              {isSuperAdmin && (
+                <label className="block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Organizație
+                  <select
+                    value={createOrgId ?? ""}
+                    onChange={(event) => setCreateOrgId(event.target.value || null)}
+                    disabled={isBusy}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                  >
+                    <option value="">— Fără organizație —</option>
+                    {organizations.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.nume}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <label className="block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Fișier Excel (.xlsx)
+                <input
+                  key={file?.name ?? "empty"}
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(event) => {
+                    const next = event.target.files?.[0] ?? null
+                    setFile(next)
+                    setPreviewCount(null)
+                    setPreviewSkippedRows(0)
+                  }}
+                  disabled={isBusy}
+                  className="mt-1 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                />
+              </label>
+
+              {previewCount !== null ? (
+                <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-400">
+                  Întrebări detectate: <strong>{previewCount}</strong>
+                  {previewSkippedRows > 0
+                    ? ` (${previewSkippedRows} rânduri ignorate)`
+                    : ""}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleClosePopup}
+                disabled={isBusy}
+              >
+                Anulează
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePreview}
+                disabled={!canPreview}
+              >
+                {previewing ? "Preview..." : "Preview"}
+              </Button>
+              <Button
+                type="button"
+                onClick={handleCreateExam}
+                disabled={!canCreate}
+                className="bg-blue-600 text-white hover:bg-blue-500"
+              >
+                {creating ? "Import în curs..." : "Importă examen"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {deleteTargetExam ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => {
               if (!deleting) {
                 setDeleteTargetExam(null)
@@ -334,21 +595,25 @@ export function ExamManagement({ examene }: ExamManagementProps) {
             }}
             aria-label="Închide confirmarea"
           />
-          <div className="relative z-10 w-full max-w-lg rounded-xl border border-rose-500/40 bg-slate-950 p-5 shadow-2xl">
-            <h4 className="text-lg font-semibold text-rose-300">Confirmă ștergerea examenului</h4>
-            <p className="mt-2 text-sm text-slate-200">
-              Această acțiune va șterge definitiv examenul, toate întrebările asociate și progresul
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-rose-500/40 bg-white p-5 shadow-2xl dark:bg-slate-950">
+            <h4 className="text-lg font-semibold text-rose-600 dark:text-rose-300">
+              Confirmă ștergerea examenului
+            </h4>
+            <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+              Această acțiune va șterge definitiv examenul, întrebările asociate și progresul
               utilizatorilor legat de acesta.
             </p>
-            <p className="mt-3 text-sm text-slate-300">
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
               Pentru confirmare, tastați exact numele examenului:{" "}
-              <span className="font-semibold text-white">{deleteTargetExam.nume_examen}</span>
+              <span className="font-semibold text-slate-900 dark:text-white">
+                {deleteTargetExam.nume_examen}
+              </span>
             </p>
             <input
               value={deleteConfirmationInput}
               onChange={(event) => setDeleteConfirmationInput(event.target.value)}
               placeholder="Numele examenului"
-              className="mt-3 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+              className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               disabled={deleting}
             />
             <div className="mt-4 flex justify-end gap-2">
@@ -380,7 +645,7 @@ export function ExamManagement({ examene }: ExamManagementProps) {
         <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             aria-label="Închide editarea"
             onClick={() => {
               if (!savingUpdate) {
@@ -390,28 +655,32 @@ export function ExamManagement({ examene }: ExamManagementProps) {
               }
             }}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-slate-950 p-5 shadow-2xl">
-            <h4 className="text-lg font-semibold text-white">Update examen</h4>
-            <p className="mt-2 text-sm text-slate-300">
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+            <h4 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Update examen
+            </h4>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
               Poți modifica numele examenului și/sau încărca un Excel pentru întrebări noi.
             </p>
 
-            <label className="mt-4 block text-sm font-medium text-slate-200">Nume examen</label>
+            <label className="mt-4 block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Nume examen
+            </label>
             <input
               value={editExamName}
               onChange={(event) => setEditExamName(event.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               disabled={savingUpdate}
             />
 
-            <label className="mt-4 block text-sm font-medium text-slate-200">
+            <label className="mt-4 block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Fișier Excel (.xlsx) - opțional
             </label>
             <input
               type="file"
               accept=".xlsx"
               onChange={(event) => setEditFile(event.target.files?.[0] ?? null)}
-              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:text-slate-100"
+              className="mt-1 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               disabled={savingUpdate}
             />
 
@@ -430,6 +699,119 @@ export function ExamManagement({ examene }: ExamManagementProps) {
               </Button>
               <Button type="button" onClick={handleSaveUpdate} disabled={!canSaveUpdate}>
                 {savingUpdate ? "Se salvează..." : "Salvează modificările"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {rulesTargetExam ? (
+        <div className="fixed inset-0 z-[96] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            aria-label="Închide modal reguli"
+            onClick={() => {
+              if (!savingRules) setRulesTargetExam(null)
+            }}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex items-start justify-between">
+              <div>
+                <h4 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Reguli simulare
+                </h4>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {rulesTargetExam.nume_examen}
+                </p>
+              </div>
+              <Settings2 className="size-5 text-blue-500" />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Întrebări simulare
+                <input
+                  type="number"
+                  min={1}
+                  value={rulesDraft.intrebari_simulare}
+                  onChange={(event) =>
+                    setRulesDraft((prev) => ({
+                      ...prev,
+                      intrebari_simulare: Number(event.target.value),
+                    }))
+                  }
+                  disabled={savingRules}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                />
+              </label>
+              <label className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Durata (minute)
+                <input
+                  type="number"
+                  min={1}
+                  value={rulesDraft.durata_minute}
+                  onChange={(event) =>
+                    setRulesDraft((prev) => ({
+                      ...prev,
+                      durata_minute: Number(event.target.value),
+                    }))
+                  }
+                  disabled={savingRules}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                />
+              </label>
+              <label className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Prag trecere
+                <input
+                  type="number"
+                  min={1}
+                  value={rulesDraft.prag_trecere}
+                  onChange={(event) =>
+                    setRulesDraft((prev) => ({
+                      ...prev,
+                      prag_trecere: Number(event.target.value),
+                    }))
+                  }
+                  disabled={savingRules}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                />
+              </label>
+              <label className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Variante răspuns
+                <input
+                  type="number"
+                  min={2}
+                  max={6}
+                  value={rulesDraft.variante_raspuns}
+                  onChange={(event) =>
+                    setRulesDraft((prev) => ({
+                      ...prev,
+                      variante_raspuns: Number(event.target.value),
+                    }))
+                  }
+                  disabled={savingRules}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setRulesTargetExam(null)}
+                disabled={savingRules}
+              >
+                Anulează
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveRules}
+                disabled={savingRules}
+                className="bg-blue-600 text-white hover:bg-blue-500"
+              >
+                {savingRules ? "Se salvează..." : "Salvează regulile"}
               </Button>
             </div>
           </div>

@@ -1,34 +1,33 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { ChevronDown } from "lucide-react"
 import {
-  fetchDistinctExamIds,
+  fetchAccessibleExams,
   fetchQuestionsBySource,
   getAvailableQuestionCount,
   toggleBookmarkForQuestion,
   updateLearningStatus,
 } from "@/lib/quiz/fetch-random-intrebari"
-import type { PracticeSource, QuizQuestion } from "@/lib/quiz/types"
+import type { ExamSummary, PracticeSource, QuizQuestion } from "@/lib/quiz/types"
 import { QuizHeader } from "./quiz-header"
 import { QuestionCard } from "./question-card"
 import { AnswerOptions } from "./answer-options"
 import { QuizNavigation } from "./quiz-navigation"
 import { QuizResults } from "./quiz-results"
 
-const QUIZ_DURATION_SEC = 30 * 60
-const DEFAULT_QUESTION_COUNT = 25
-const MIN_PRACTICE_QUESTIONS = 5
+const FALLBACK_DURATION_SEC = 30 * 60
+const FALLBACK_QUESTION_COUNT = 25
+const FALLBACK_PASS_THRESHOLD = 18
 const MAX_PRACTICE_QUESTIONS = 100
-const SIMULATION_PASS_THRESHOLD = 18
 const SELECTED_EXAM_STORAGE_KEY = "quiz.selectedExamId"
 
 type QuizMode = "simulation" | "practice"
 type QuizStatus = "setup" | "loading" | "quiz" | "results" | "error"
-type ExamOption = { id: number; name: string }
+type ExamOption = ExamSummary
 
 type ResultStats = {
   mode: QuizMode
@@ -62,7 +61,7 @@ export function QuizInterface() {
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null)
   const [examOptions, setExamOptions] = useState<ExamOption[]>([])
   const [availablePracticeCount, setAvailablePracticeCount] = useState(0)
-  const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTION_COUNT)
+  const [questionCount, setQuestionCount] = useState(FALLBACK_QUESTION_COUNT)
   const [isAvailabilityLoading, setIsAvailabilityLoading] = useState(false)
   const [availabilityMessage, setAvailabilityMessage] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -72,9 +71,17 @@ export function QuizInterface() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Set<string>>(() => new Set())
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [timeRemaining, setTimeRemaining] = useState(QUIZ_DURATION_SEC)
+  const [timeRemaining, setTimeRemaining] = useState(FALLBACK_DURATION_SEC)
   const [resultStats, setResultStats] = useState<ResultStats | null>(null)
   const [isExitModalOpen, setIsExitModalOpen] = useState(false)
+
+  const selectedExam = useMemo(
+    () => examOptions.find((option) => option.id === selectedExamId) ?? null,
+    [examOptions, selectedExamId]
+  )
+  const examDurationSec = selectedExam ? selectedExam.durataMinute * 60 : FALLBACK_DURATION_SEC
+  const examSimulationCount = selectedExam?.intrebariSimulare ?? FALLBACK_QUESTION_COUNT
+  const examPassThreshold = selectedExam?.pragTrecere ?? FALLBACK_PASS_THRESHOLD
 
   const questionsRef = useRef(questions)
   const answersRef = useRef(answers)
@@ -139,9 +146,9 @@ export function QuizInterface() {
         return
       }
 
-      const examIds = await fetchDistinctExamIds(supabase, activeUserId)
+      const exams = await fetchAccessibleExams(supabase, activeUserId)
 
-      if (examIds.length === 0) {
+      if (exams.length === 0) {
         setExamOptions([])
         setSelectedExamId(null)
         setAvailabilityMessage("Nu ai acces la niciun examen momentan. Contactează administratorul.")
@@ -149,31 +156,15 @@ export function QuizInterface() {
         return
       }
 
-      const { data: examRows, error: examRowsError } = await supabase
-        .from("examene")
-        .select("id, nume_examen")
-        .in("id", examIds)
-      const nameById = new Map<number, string>(
-        !examRowsError
-          ? (examRows ?? []).map((row) => [
-              Number(row.id),
-              String(row.nume_examen ?? "").trim() || `Examen ${row.id}`,
-            ])
-          : []
-      )
-      const options = examIds.map((id) => ({
-        id,
-        name: nameById.get(id) ?? `Examen ${id}`,
-      }))
-      setExamOptions(options)
+      setExamOptions(exams)
 
       const persistedExamId = Number(window.localStorage.getItem(SELECTED_EXAM_STORAGE_KEY))
       const hasPersistedExam =
         Number.isFinite(persistedExamId) &&
         persistedExamId > 0 &&
-        options.some((option) => option.id === persistedExamId)
+        exams.some((option) => option.id === persistedExamId)
 
-      const nextExamId = hasPersistedExam ? persistedExamId : options[0].id
+      const nextExamId = hasPersistedExam ? persistedExamId : exams[0].id
 
       setSelectedExamId(nextExamId)
       window.localStorage.setItem(SELECTED_EXAM_STORAGE_KEY, String(nextExamId))
@@ -211,10 +202,10 @@ export function QuizInterface() {
       setQuestionCount(0)
       return
     }
-    setQuestionCount(Math.min(DEFAULT_QUESTION_COUNT, dynamicMax))
-  }, [isPracticeMode, availablePracticeCount])
+    setQuestionCount(Math.min(examSimulationCount, dynamicMax))
+  }, [isPracticeMode, availablePracticeCount, examSimulationCount])
 
-  const loadQuiz = useCallback(async (selectedMode: QuizMode, selectedCount: number, examenId: number, source: PracticeSource, currentUserId: string | null) => {
+  const loadQuiz = useCallback(async (selectedMode: QuizMode, selectedCount: number, examenId: number, source: PracticeSource, currentUserId: string | null, durationSec: number) => {
     finishedRef.current = false
     modeRef.current = selectedMode
     setMode(selectedMode)
@@ -226,7 +217,7 @@ export function QuizInterface() {
     setSelectedAnswer(null)
     setBookmarkedQuestions(new Set())
     setAnswers({})
-    setTimeRemaining(QUIZ_DURATION_SEC)
+    setTimeRemaining(durationSec)
     try {
       const qs = await fetchQuestionsBySource(supabase, { count: selectedCount, examenId, source: selectedMode === "practice" ? source : "all", userId: currentUserId ?? "" })
       if (qs.length === 0) {
@@ -306,8 +297,8 @@ export function QuizInterface() {
       return
     }
     if (isPracticeMode && availablePracticeCount === 0) return
-    const selectedCount = mode === "simulation" ? DEFAULT_QUESTION_COUNT : Math.min(Math.max(1, availablePracticeCount), Math.min(MAX_PRACTICE_QUESTIONS, Math.max(1, questionCount)))
-    void loadQuiz(mode, selectedCount, selectedExamId, practiceSource, userId)
+    const selectedCount = mode === "simulation" ? examSimulationCount : Math.min(Math.max(1, availablePracticeCount), Math.min(MAX_PRACTICE_QUESTIONS, Math.max(1, questionCount)))
+    void loadQuiz(mode, selectedCount, selectedExamId, practiceSource, userId, examDurationSec)
   }
 
   const handleExamChange = useCallback((examId: number) => {
@@ -322,7 +313,7 @@ export function QuizInterface() {
     setSelectedAnswer(null)
     setBookmarkedQuestions(new Set())
     setAnswers({})
-    setTimeRemaining(QUIZ_DURATION_SEC)
+    setTimeRemaining(examDurationSec)
     setResultStats(null)
     setErrorMessage(null)
     setStatus("setup")
@@ -387,7 +378,7 @@ export function QuizInterface() {
   }
 
   if (status === "results" && resultStats) {
-    return <QuizResults mode={resultStats.mode} correctCount={resultStats.correct} totalQuestions={resultStats.total} passThreshold={SIMULATION_PASS_THRESHOLD} elapsedLabel={formatElapsed(resultStats.elapsedMs)} finishedByTimeout={resultStats.timedOut} onRestart={() => setStatus("setup")} />
+    return <QuizResults mode={resultStats.mode} correctCount={resultStats.correct} totalQuestions={resultStats.total} passThreshold={examPassThreshold} elapsedLabel={formatElapsed(resultStats.elapsedMs)} finishedByTimeout={resultStats.timedOut} onRestart={() => setStatus("setup")} />
   }
 
   if (status === "setup") {
@@ -396,7 +387,7 @@ export function QuizInterface() {
     const sliderValue = Math.max(1, Math.min(questionCount, sliderMax))
     const hasSingleExamOption = examOptions.length === 1
     const noExamAccess = examOptions.length === 0
-    const selectedExamName = examOptions.find((exam) => exam.id === selectedExamId)?.name ?? null
+    const selectedExamName = selectedExam?.name ?? null
     return (
       <div className="min-h-screen bg-background">
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
@@ -460,9 +451,17 @@ export function QuizInterface() {
               <div className="grid gap-4 md:grid-cols-2">
                 <button type="button" data-testid="quiz-mode-simulation" onClick={() => setMode("simulation")} className={`rounded-xl border-2 p-5 text-left transition ${mode === "simulation" ? "border-primary bg-primary/10" : "border-border bg-secondary/30 hover:border-primary/40"}`}>
                   <p className="text-lg font-semibold text-foreground">Simulare Examen</p>
+                  {selectedExam ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {selectedExam.intrebariSimulare} întrebări · {selectedExam.durataMinute} min · trecere ≥ {selectedExam.pragTrecere}
+                    </p>
+                  ) : null}
                 </button>
                 <button type="button" data-testid="quiz-mode-practice" onClick={() => setMode("practice")} className={`rounded-xl border-2 p-5 text-left transition ${mode === "practice" ? "border-primary bg-primary/10" : "border-border bg-secondary/30 hover:border-primary/40"}`}>
                   <p className="text-lg font-semibold text-foreground">Mod Practică</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Antrenament fără limită de timp.
+                  </p>
                 </button>
               </div>
               {mode === "practice" && (

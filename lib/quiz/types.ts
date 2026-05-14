@@ -26,3 +26,12 @@ export type IntrebareRow = {
 }
 
 export type PracticeSource = "all" | "bookmarked" | "wrong"
+
+export type ExamSummary = {
+  id: number
+  name: string
+  pragTrecere: number
+  intrebariSimulare: number
+  varianteRaspuns: number
+  durataMinute: number
+}
