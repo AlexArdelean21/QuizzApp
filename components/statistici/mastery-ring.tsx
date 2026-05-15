@@ -51,8 +51,7 @@ export function MasteryRing({ masteryPct, distinctCorrectCount, totalQuestions, 
           Nivel de pregătire
         </p>
         <p className="text-sm text-muted-foreground">
-          Procent din pool-ul examenului pentru care ai răspuns corect cel puțin o dată — la
-          simulare și la practică.
+          Procent din pool-ul examenului pentru care ai răspuns corect.
         </p>
       </div>
 

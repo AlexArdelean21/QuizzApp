@@ -1,9 +1,16 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const ExcelJS = require("exceljs");
 
 const PROJECT_ROOT = process.cwd();
 const OUTPUT_FILE = path.join(PROJECT_ROOT, "import_supabase.csv");
+
+// Columns B..K (Excel indices 2..11) hold up to 10 answer variants.
+const MIN_VARIANT_COL = 2;
+const MAX_VARIANT_COL = 11;
+const MAX_VARIANTS = MAX_VARIANT_COL - MIN_VARIANT_COL + 1; // 10
+const OPTION_LABELS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
 
 function cellValueToText(value) {
   if (value == null) return "";
@@ -47,11 +54,38 @@ function hasFill(cell) {
   return false;
 }
 
-function detectCorrectAnswer(row) {
-  if (hasFill(row.getCell(2))) return "a";
-  if (hasFill(row.getCell(3))) return "b";
-  if (hasFill(row.getCell(4))) return "c";
-  return "";
+/**
+ * Returns every label (a..j) whose corresponding answer cell has any kind
+ * of background fill. A cell is considered "marked correct" iff it has a
+ * non-empty fill, regardless of color — the convention is that the import
+ * spreadsheet colors only the correct answer cells.
+ */
+function detectCorrectAnswers(row, variantCount) {
+  const labels = [];
+  for (let i = 0; i < variantCount; i++) {
+    const cell = row.getCell(MIN_VARIANT_COL + i);
+    if (hasFill(cell)) {
+      labels.push(OPTION_LABELS[i]);
+    }
+  }
+  return labels;
+}
+
+/**
+ * Reads the actual variant texts from one Excel row. Trailing empty
+ * variant cells are ignored so a 3-option row doesn't generate fake
+ * empty D..J entries, and a 5-option row stops at the last filled cell.
+ */
+function readVariants(row) {
+  const variants = [];
+  let lastNonEmpty = -1;
+  for (let i = 0; i < MAX_VARIANTS; i++) {
+    const text = normalizeText(row.getCell(MIN_VARIANT_COL + i).value);
+    variants.push(text);
+    if (text) lastNonEmpty = i;
+  }
+  if (lastNonEmpty < 0) return [];
+  return variants.slice(0, lastNonEmpty + 1);
 }
 
 async function getXlsxFilesFromRoot() {
@@ -64,6 +98,22 @@ async function getXlsxFilesFromRoot() {
     .sort((a, b) => a.localeCompare(b, "ro"));
 }
 
+/**
+ * Serializes a JS string array as a Postgres `text[]` literal that
+ * pg_copy / Supabase CSV import will accept (e.g. {a,b,c}). Embedded
+ * commas, quotes, and backslashes are escaped per Postgres array
+ * conventions.
+ */
+function toPgTextArray(values) {
+  const escaped = values.map((value) => {
+    const safe = String(value)
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"');
+    return `"${safe}"`;
+  });
+  return `{${escaped.join(",")}}`;
+}
+
 async function processWorkbook(filePath, rowsOut) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
@@ -71,29 +121,32 @@ async function processWorkbook(filePath, rowsOut) {
   for (const sheet of workbook.worksheets) {
     sheet.eachRow({ includeEmpty: false }, (row) => {
       const intrebareText = normalizeText(row.getCell(1).value);
-      const variantaA = normalizeText(row.getCell(2).value);
-      const variantaB = normalizeText(row.getCell(3).value);
-      const variantaC = normalizeText(row.getCell(4).value);
+      const variants = readVariants(row);
 
-      if (!intrebareText && !variantaA && !variantaB && !variantaC) {
+      if (!intrebareText && variants.length === 0) {
         return;
       }
 
-      const raspunsCorect = detectCorrectAnswer(row);
-      if (!raspunsCorect) {
+      if (variants.length < 2) {
+        console.warn(
+          `[WARN] Mai putin de 2 variante in ${path.basename(filePath)} / sheet "${sheet.name}" / rand ${row.number} — sarit.`
+        );
+        return;
+      }
+
+      const corectArr = detectCorrectAnswers(row, variants.length);
+      if (corectArr.length === 0) {
         console.warn(
           `[WARN] Fara varianta colorata in ${path.basename(filePath)} / sheet "${sheet.name}" / rand ${row.number}`
         );
       }
 
-      rowsOut.push([
-        "1",
-        intrebareText,
-        variantaA,
-        variantaB,
-        variantaC,
-        raspunsCorect,
-      ]);
+      rowsOut.push({
+        examen_id: "1",
+        intrebare_text: intrebareText,
+        variante: JSON.stringify(variants),
+        raspunsuri_corecte: toPgTextArray(corectArr),
+      });
     });
   }
 }
@@ -111,22 +164,22 @@ async function main() {
     await processWorkbook(filePath, rows);
   }
 
-  const header = [
-    "examen_id",
-    "intrebare_text",
-    "varianta_a",
-    "varianta_b",
-    "varianta_c",
-    "raspuns_corect",
-  ];
+  const header = ["examen_id", "intrebare_text", "variante", "raspunsuri_corecte"];
 
   const csvLines = [header.join(",")];
   for (const row of rows) {
-    csvLines.push(row.map(csvEscape).join(","));
+    csvLines.push(
+      [row.examen_id, row.intrebare_text, row.variante, row.raspunsuri_corecte]
+        .map(csvEscape)
+        .join(",")
+    );
   }
 
   await fs.writeFile(OUTPUT_FILE, `${csvLines.join("\n")}\n`, "utf8");
   console.log(`[DONE] Am generat ${OUTPUT_FILE} cu ${rows.length} intrebari.`);
+  console.log(
+    "[NOTE] In Supabase: importati CSV-ul si setati tipul coloanei `variante` ca jsonb si `raspunsuri_corecte` ca text[]."
+  );
 }
 
 main().catch((error) => {

@@ -10,35 +10,48 @@ interface AnswerOption {
 
 interface AnswerOptionsProps {
   options: AnswerOption[]
-  selectedAnswer: string | null
-  correctAnswer: string
+  selectedAnswers: string[]
+  correctAnswers: string[]
   showImmediateFeedback: boolean
   isLocked: boolean
-  onSelectAnswer: (answerId: string) => void
+  multiple: boolean
+  onToggleAnswer: (answerId: string) => void
 }
 
 export function AnswerOptions({
   options,
-  selectedAnswer,
-  correctAnswer,
+  selectedAnswers,
+  correctAnswers,
   showImmediateFeedback,
   isLocked,
-  onSelectAnswer,
+  multiple,
+  onToggleAnswer,
 }: AnswerOptionsProps) {
+  const selectedSet = new Set(selectedAnswers)
+  const correctSet = new Set(correctAnswers)
+
   return (
-    <div className="flex w-full flex-col gap-3 md:gap-4">
+    <div
+      role={multiple ? "group" : "radiogroup"}
+      aria-label="Variante de răspuns"
+      className="flex w-full flex-col gap-3 md:gap-4"
+    >
       {options.map((option) => {
-        const isSelected = selectedAnswer === option.id
-        const isCorrectOption = option.id === correctAnswer
+        const isSelected = selectedSet.has(option.id)
+        const isCorrectOption = correctSet.has(option.id)
         const isWrongSelected = showImmediateFeedback && isSelected && !isCorrectOption
-        const isCorrectShown =
-          showImmediateFeedback && (isCorrectOption || (isSelected && isCorrectOption))
+        const isMissedCorrect = showImmediateFeedback && !isSelected && isCorrectOption
+        const isCorrectShown = showImmediateFeedback && (isCorrectOption || isMissedCorrect)
 
         return (
           <button
             key={option.id}
-            onClick={() => onSelectAnswer(option.id)}
+            type="button"
+            role={multiple ? "checkbox" : "radio"}
+            aria-checked={isSelected}
+            onClick={() => onToggleAnswer(option.id)}
             disabled={isLocked}
+            data-testid={`answer-option-${option.id}`}
             className={cn(
               "group relative flex w-full min-w-0 items-center gap-4 rounded-xl border-2 p-5 text-left transition-all duration-200 md:gap-5 md:p-6",
               !isLocked && "hover:border-primary hover:bg-primary/5 shadow-sm hover:shadow-md",
@@ -54,12 +67,11 @@ export function AnswerOptions({
                   ? "border-primary bg-primary/10"
                   : "border-border bg-card"
             )}
-            aria-pressed={isSelected}
           >
-            {/* Option Label Circle */}
             <span
               className={cn(
-                "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-all duration-200 md:size-11 md:text-base",
+                "flex size-10 shrink-0 items-center justify-center text-sm font-semibold transition-all duration-200 md:size-11 md:text-base",
+                multiple ? "rounded-lg" : "rounded-full",
                 showImmediateFeedback
                   ? isCorrectShown
                     ? "bg-emerald-500 text-white"
@@ -74,7 +86,6 @@ export function AnswerOptions({
               {option.label}
             </span>
 
-            {/* Option Text */}
             <span
               className={cn(
                 "min-w-0 flex-1 text-lg font-medium transition-colors duration-200 md:text-xl",
@@ -92,10 +103,16 @@ export function AnswerOptions({
               {option.text}
             </span>
 
-            {/* Selected Indicator */}
+            {/*
+              The selected/correct indicator is rendered as a circle for
+              single-choice questions (radio) and as a square for
+              multi-correct (checkbox) so the visual affordance matches the
+              underlying input semantics.
+            */}
             <span
               className={cn(
-                "size-5 rounded-full border-2 transition-all duration-200",
+                "flex size-5 items-center justify-center border-2 transition-all duration-200",
+                multiple ? "rounded-md" : "rounded-full",
                 showImmediateFeedback
                   ? isCorrectShown
                     ? "border-emerald-500 bg-emerald-500"

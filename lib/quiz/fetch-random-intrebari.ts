@@ -1,19 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isAdminRole, isSuperAdminRole, normalizeRole } from "@/lib/auth/roles"
-import type {
-  AnswerId,
-  ExamSummary,
-  IntrebareRow,
-  PracticeSource,
-  QuizQuestion,
+import {
+  MAX_QUIZ_VARIANTS,
+  MIN_QUIZ_VARIANTS,
+  OPTION_IDS,
+  OPTION_LABELS,
+  type AnswerId,
+  type ExamSummary,
+  type IntrebareRow,
+  type PracticeSource,
+  type QuizOption,
+  type QuizQuestion,
 } from "./types"
-
-function normalizeCorrect(raw: string | null | undefined): AnswerId | null {
-  if (raw == null) return null
-  const t = String(raw).trim().toLowerCase()
-  if (t === "a" || t === "b" || t === "c") return t
-  return null
-}
 
 function shuffleInPlace<T>(items: T[]): void {
   for (let i = items.length - 1; i > 0; i--) {
@@ -22,22 +20,92 @@ function shuffleInPlace<T>(items: T[]): void {
   }
 }
 
+function coerceVariantArray(value: unknown): string[] | null {
+  if (value == null) return null
+  let candidate: unknown = value
+  // Supabase clients should already return parsed JSONB, but be defensive
+  // against drivers (or older REST proxies) that hand it back as a string.
+  if (typeof candidate === "string") {
+    const trimmed = candidate.trim()
+    if (!trimmed.startsWith("[")) return null
+    try {
+      candidate = JSON.parse(trimmed)
+    } catch {
+      return null
+    }
+  }
+  if (!Array.isArray(candidate)) return null
+  return candidate.map((item) => String(item ?? "").trim())
+}
+
+function buildOptionsFromVariante(value: unknown): QuizOption[] | null {
+  const raw = coerceVariantArray(value)
+  if (!raw) return null
+  const cleaned: QuizOption[] = []
+  for (let i = 0; i < raw.length && i < MAX_QUIZ_VARIANTS; i++) {
+    const text = raw[i]
+    if (!text) continue
+    cleaned.push({ id: OPTION_IDS[i], label: OPTION_LABELS[i], text })
+  }
+  return cleaned.length >= MIN_QUIZ_VARIANTS ? cleaned : null
+}
+
+function buildOptionsFromLegacy(row: IntrebareRow): QuizOption[] {
+  const out: QuizOption[] = []
+  const a = String(row.varianta_a ?? "").trim()
+  const b = String(row.varianta_b ?? "").trim()
+  const c = String(row.varianta_c ?? "").trim()
+  if (a) out.push({ id: "a", label: "A", text: a })
+  if (b) out.push({ id: "b", label: "B", text: b })
+  if (c) out.push({ id: "c", label: "C", text: c })
+  return out
+}
+
+function normalizeCorrectAnswers(value: unknown, allowedIds: Set<string>): AnswerId[] {
+  const out = new Set<AnswerId>()
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === "string" && value.trim().startsWith("[")
+      ? (() => {
+          try {
+            return JSON.parse(value)
+          } catch {
+            return null
+          }
+        })()
+      : null
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      const id = String(item ?? "").trim().toLowerCase()
+      if (allowedIds.has(id)) out.add(id as AnswerId)
+    }
+  }
+  return Array.from(out).sort()
+}
+
 export function mapIntrebareRowToQuestion(row: IntrebareRow): QuizQuestion | null {
-  const correct = normalizeCorrect(row.raspuns_corect)
-  if (!correct) return null
   const examenId = Number(row.examen_id ?? 0)
   if (!Number.isFinite(examenId) || examenId <= 0) return null
+
+  const options = buildOptionsFromVariante(row.variante) ?? buildOptionsFromLegacy(row)
+  if (options.length < MIN_QUIZ_VARIANTS) return null
+
+  const allowedIds = new Set<string>(options.map((option) => option.id))
+  let correctAnswers = normalizeCorrectAnswers(row.raspunsuri_corecte, allowedIds)
+
+  if (correctAnswers.length === 0) {
+    // Legacy fallback: a single-character `raspuns_corect` column.
+    const legacy = String(row.raspuns_corect ?? "").trim().toLowerCase()
+    if (allowedIds.has(legacy)) correctAnswers = [legacy as AnswerId]
+  }
+  if (correctAnswers.length === 0) return null
 
   return {
     id: String(row.id),
     examenId,
     text: String(row.intrebare_text ?? "").trim(),
-    correctAnswer: correct,
-    options: [
-      { id: "a", label: "A", text: String(row.varianta_a ?? "").trim() },
-      { id: "b", label: "B", text: String(row.varianta_b ?? "").trim() },
-      { id: "c", label: "C", text: String(row.varianta_c ?? "").trim() },
-    ],
+    correctAnswers,
+    options,
   }
 }
 

@@ -15,7 +15,7 @@ import {
   toggleBookmarkForQuestion,
   updateLearningStatus,
 } from "@/lib/quiz/fetch-random-intrebari"
-import type { ExamSummary, PracticeSource, QuizQuestion } from "@/lib/quiz/types"
+import { areAnswerSetsEqual, type ExamSummary, type PracticeSource, type QuizQuestion } from "@/lib/quiz/types"
 import { QuizHeader } from "./quiz-header"
 import { QuestionCard } from "./question-card"
 import { AnswerOptions } from "./answer-options"
@@ -71,9 +71,16 @@ export function QuizInterface() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
+  const [selectedAnswers, setSelectedAnswers] = useState<string[]>([])
   const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Set<string>>(() => new Set())
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  // Stores the full selection (array of option ids) for each answered question.
+  // Multi-correct questions naturally produce arrays with multiple entries;
+  // single-correct ones produce a single-element array.
+  const [answers, setAnswers] = useState<Record<string, string[]>>({})
+  // Practice-mode only: question ids the user has already committed. Once a
+  // question is in this set, options become read-only and immediate feedback
+  // is rendered (mirrors the previous single-answer auto-lock behavior).
+  const [practiceLocked, setPracticeLocked] = useState<Set<string>>(() => new Set())
   const [timeRemaining, setTimeRemaining] = useState(FALLBACK_DURATION_SEC)
   const [resultStats, setResultStats] = useState<ResultStats | null>(null)
   const [isExitModalOpen, setIsExitModalOpen] = useState(false)
@@ -93,6 +100,11 @@ export function QuizInterface() {
   const selectedExamIdRef = useRef<number | null>(selectedExamId)
   const startedAtRef = useRef<number>(0)
   const finishedRef = useRef(false)
+  // Question ids for which a simulation answer has already been written to
+  // `istoric_raspunsuri`. Used to guarantee one row per question per
+  // simulation, regardless of whether the answer was logged on "Next" or
+  // when the timer / finalize swept up any leftovers.
+  const recordedSimulationRef = useRef<Set<string>>(new Set())
   const practiceSourceDropdownRef = useRef<HTMLDivElement | null>(null)
   const examDropdownRef = useRef<HTMLDivElement | null>(null)
 
@@ -109,7 +121,6 @@ export function QuizInterface() {
   }, [userId, selectedExamId])
 
   const isPracticeMode = mode === "practice"
-  const hasAnsweredCurrent = selectedAnswer !== null
   const sourceLabelMap: Record<PracticeSource, string> = {
     all: "toate",
     bookmarked: "salvate",
@@ -122,7 +133,43 @@ export function QuizInterface() {
     const qs = questionsRef.current
     const ans = answersRef.current
     const currentMode = modeRef.current
-    const correct = qs.reduce((acc, q) => acc + (ans[q.id] === q.correctAnswer ? 1 : 0), 0)
+
+    // Sweep any simulation answers that weren't already recorded (e.g. the
+    // last question advanced via Finish, or a timer-driven finalize). This
+    // mirrors the previous behavior where each click in simulation mode
+    // produced an `istoric_raspunsuri` row, but de-duplicated to one per
+    // question.
+    if (currentMode === "simulation" && userIdRef.current && selectedExamIdRef.current != null) {
+      const sweepUserId = userIdRef.current
+      const sweepExamId = selectedExamIdRef.current
+      for (const q of qs) {
+        const selection = ans[q.id]
+        if (!selection || selection.length === 0) continue
+        if (recordedSimulationRef.current.has(q.id)) continue
+        recordedSimulationRef.current.add(q.id)
+        const isCorrect = areAnswerSetsEqual(selection, q.correctAnswers)
+        void updateLearningStatus(supabase, {
+          userId: sweepUserId,
+          examenId: sweepExamId,
+          intrebareId: q.id,
+          isCorrect,
+        })
+        void recordAnswerHistory(supabase, {
+          userId: sweepUserId,
+          examenId: sweepExamId,
+          intrebareId: q.id,
+          isCorrect,
+          mode: "simulation",
+        }).catch((error) => {
+          console.error("Failed to record answer history:", error)
+        })
+      }
+    }
+
+    const correct = qs.reduce(
+      (acc, q) => acc + (areAnswerSetsEqual(ans[q.id] ?? [], q.correctAnswers) ? 1 : 0),
+      0
+    )
     const wrong = Math.max(0, qs.length - correct)
     const finishedAt = Date.now()
     const elapsedMs = finishedAt - startedAtRef.current
@@ -251,15 +298,17 @@ export function QuizInterface() {
   const loadQuiz = useCallback(async (selectedMode: QuizMode, selectedCount: number, examenId: number, source: PracticeSource, currentUserId: string | null, durationSec: number) => {
     finishedRef.current = false
     modeRef.current = selectedMode
+    recordedSimulationRef.current = new Set()
     setMode(selectedMode)
     setErrorMessage(null)
     setStatus("loading")
     setResultStats(null)
     setQuestions([])
     setCurrentIndex(0)
-    setSelectedAnswer(null)
+    setSelectedAnswers([])
     setBookmarkedQuestions(new Set())
     setAnswers({})
+    setPracticeLocked(new Set())
     setTimeRemaining(durationSec)
     try {
       const qs = await fetchQuestionsBySource(supabase, { count: selectedCount, examenId, source: selectedMode === "practice" ? source : "all", userId: currentUserId ?? "" })
@@ -296,33 +345,82 @@ export function QuizInterface() {
   const currentQuestion = questions[currentIndex]
   const totalQuestions = questions.length
   const isLastQuestion = totalQuestions > 0 && currentIndex === totalQuestions - 1
+  const isMultipleChoice = (currentQuestion?.correctAnswers.length ?? 0) > 1
+  const isCurrentQuestionLockedForPractice =
+    isPracticeMode && currentQuestion != null && practiceLocked.has(currentQuestion.id)
+  const hasAnyCurrentSelection = selectedAnswers.length > 0
 
   useEffect(() => {
-    if (!currentQuestion) return setSelectedAnswer(null)
-    setSelectedAnswer(answers[currentQuestion.id] ?? null)
+    if (!currentQuestion) return setSelectedAnswers([])
+    setSelectedAnswers(answers[currentQuestion.id] ?? [])
   }, [currentIndex, currentQuestion, answers])
 
-  const handleSelectAnswer = (answerId: string) => {
-    if (!currentQuestion || status !== "quiz") return
-    if (isPracticeMode && selectedAnswer) return
-    setSelectedAnswer(answerId)
-    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: answerId }))
-    if (userId && selectedExamId != null) {
-      const isCorrect = answerId === currentQuestion.correctAnswer
-      void updateLearningStatus(supabase, { userId, examenId: selectedExamId, intrebareId: currentQuestion.id, isCorrect })
-      // Append every attempt to the answer history so the statistics page can
+  const commitPracticeAnswer = useCallback(
+    (question: QuizQuestion, finalSelection: string[]) => {
+      if (!userId || selectedExamId == null) return
+      const isCorrect = areAnswerSetsEqual(finalSelection, question.correctAnswers)
+      void updateLearningStatus(supabase, {
+        userId,
+        examenId: selectedExamId,
+        intrebareId: question.id,
+        isCorrect,
+      })
+      // Append every commit to the answer history so the statistics page can
       // compute mastery + per-question last attempt. Failures are non-fatal:
       // the quiz UX must keep working even if the log write fails.
       void recordAnswerHistory(supabase, {
         userId,
         examenId: selectedExamId,
-        intrebareId: currentQuestion.id,
+        intrebareId: question.id,
         isCorrect,
-        mode,
+        mode: "practice",
       }).catch((error) => {
         console.error("Failed to record answer history:", error)
       })
+    },
+    [supabase, userId, selectedExamId]
+  )
+
+  const handleToggleAnswer = (answerId: string) => {
+    if (!currentQuestion || status !== "quiz") return
+    if (isCurrentQuestionLockedForPractice) return
+
+    const correctCount = currentQuestion.correctAnswers.length
+    const allowsMultiple = correctCount > 1
+
+    const nextSelection = allowsMultiple
+      ? selectedAnswers.includes(answerId)
+        ? selectedAnswers.filter((id) => id !== answerId)
+        : [...selectedAnswers, answerId]
+      : [answerId]
+
+    setSelectedAnswers(nextSelection)
+    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: nextSelection }))
+
+    // Single-correct + practice mode keeps the original "instant commit"
+    // UX: tap an option, see feedback, advance. Multi-correct practice
+    // requires an explicit "Verifică" press so the user can pick every
+    // valid answer before locking the question.
+    if (isPracticeMode && !allowsMultiple) {
+      setPracticeLocked((prev) => {
+        const next = new Set(prev)
+        next.add(currentQuestion.id)
+        return next
+      })
+      commitPracticeAnswer(currentQuestion, nextSelection)
     }
+  }
+
+  const handleVerifyPracticeAnswer = () => {
+    if (!currentQuestion || !isPracticeMode) return
+    if (isCurrentQuestionLockedForPractice) return
+    if (selectedAnswers.length === 0) return
+    setPracticeLocked((prev) => {
+      const next = new Set(prev)
+      next.add(currentQuestion.id)
+      return next
+    })
+    commitPracticeAnswer(currentQuestion, selectedAnswers)
   }
 
   const handleToggleBookmark = () => {
@@ -337,8 +435,40 @@ export function QuizInterface() {
     void toggleBookmarkForQuestion(supabase, { userId, examenId: selectedExamId, intrebareId: currentQuestion.id, shouldBookmark })
   }
 
+  const recordSimulationAttempt = useCallback(
+    (question: QuizQuestion, finalSelection: string[]) => {
+      if (!userId || selectedExamId == null) return
+      if (recordedSimulationRef.current.has(question.id)) return
+      recordedSimulationRef.current.add(question.id)
+      const isCorrect = areAnswerSetsEqual(finalSelection, question.correctAnswers)
+      void updateLearningStatus(supabase, {
+        userId,
+        examenId: selectedExamId,
+        intrebareId: question.id,
+        isCorrect,
+      })
+      void recordAnswerHistory(supabase, {
+        userId,
+        examenId: selectedExamId,
+        intrebareId: question.id,
+        isCorrect,
+        mode: "simulation",
+      }).catch((error) => {
+        console.error("Failed to record answer history:", error)
+      })
+    },
+    [supabase, userId, selectedExamId]
+  )
+
   const handleNext = () => {
     if (!currentQuestion || status !== "quiz") return
+
+    // In simulation mode the user can freely toggle options; we therefore
+    // only persist the answer once they commit to it by moving on.
+    if (!isPracticeMode && selectedAnswers.length > 0) {
+      recordSimulationAttempt(currentQuestion, selectedAnswers)
+    }
+
     if (isLastQuestion) finalizeQuiz({ timedOut: false })
     else setCurrentIndex((i) => i + 1)
   }
@@ -364,11 +494,13 @@ export function QuizInterface() {
 
   const resetToSetup = () => {
     finishedRef.current = false
+    recordedSimulationRef.current = new Set()
     setQuestions([])
     setCurrentIndex(0)
-    setSelectedAnswer(null)
+    setSelectedAnswers([])
     setBookmarkedQuestions(new Set())
     setAnswers({})
+    setPracticeLocked(new Set())
     setTimeRemaining(examDurationSec)
     setResultStats(null)
     setErrorMessage(null)
@@ -591,9 +723,41 @@ export function QuizInterface() {
       <QuizHeader currentQuestion={currentIndex + 1} totalQuestions={totalQuestions} timeRemaining={formatClock(timeRemaining)} />
       <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
         <div key={currentQuestion.id} className="flex w-full flex-col gap-8 md:gap-10 quiz-question-animate">
-          <QuestionCard questionNumber={currentIndex + 1} questionText={currentQuestion.text} isBookmarked={bookmarkedQuestions.has(currentQuestion.id)} onToggleBookmark={handleToggleBookmark} />
-          <AnswerOptions options={currentQuestion.options} selectedAnswer={selectedAnswer} correctAnswer={currentQuestion.correctAnswer} showImmediateFeedback={isPracticeMode && hasAnsweredCurrent} isLocked={isPracticeMode && hasAnsweredCurrent} onSelectAnswer={handleSelectAnswer} />
-          {(mode === "simulation" || hasAnsweredCurrent) && <QuizNavigation onNext={handleNext} isLastQuestion={isLastQuestion} hasSelectedAnswer={selectedAnswer !== null} />}
+          <QuestionCard
+            questionNumber={currentIndex + 1}
+            questionText={currentQuestion.text}
+            isBookmarked={bookmarkedQuestions.has(currentQuestion.id)}
+            onToggleBookmark={handleToggleBookmark}
+            isMultipleChoice={isMultipleChoice}
+          />
+          <AnswerOptions
+            options={currentQuestion.options}
+            selectedAnswers={selectedAnswers}
+            correctAnswers={currentQuestion.correctAnswers}
+            showImmediateFeedback={isCurrentQuestionLockedForPractice}
+            isLocked={isCurrentQuestionLockedForPractice}
+            multiple={isMultipleChoice}
+            onToggleAnswer={handleToggleAnswer}
+          />
+          {(mode === "simulation" || hasAnyCurrentSelection) && (
+            <QuizNavigation
+              onNext={handleNext}
+              isLastQuestion={isLastQuestion}
+              hasSelectedAnswer={
+                isPracticeMode
+                  ? // In practice, advancing requires the question to be
+                    // committed first (instant for single, via "Verifică"
+                    // for multi). For simulation, any selection is enough.
+                    isCurrentQuestionLockedForPractice
+                  : hasAnyCurrentSelection
+              }
+              onVerify={handleVerifyPracticeAnswer}
+              showVerify={
+                isPracticeMode && isMultipleChoice && !isCurrentQuestionLockedForPractice
+              }
+              verifyDisabled={!hasAnyCurrentSelection}
+            />
+          )}
         </div>
       </main>
       {isExitModalOpen && (

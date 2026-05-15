@@ -1,4 +1,11 @@
-export type AnswerId = "a" | "b" | "c"
+export const MAX_QUIZ_VARIANTS = 10
+export const MIN_QUIZ_VARIANTS = 2
+
+// "a" .. "j" (up to 10 variants per question).
+export const OPTION_IDS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] as const
+export const OPTION_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"] as const
+
+export type AnswerId = (typeof OPTION_IDS)[number]
 
 export type QuizOption = {
   id: AnswerId
@@ -11,18 +18,26 @@ export type QuizQuestion = {
   examenId: number
   text: string
   options: QuizOption[]
-  correctAnswer: AnswerId
+  /** Sorted list of every correct option id for this question. */
+  correctAnswers: AnswerId[]
 }
 
-/** Rând din tabelul `intrebari` (coloane ca în import CSV). */
+/**
+ * Row shape from `intrebari` as returned by Supabase. The legacy
+ * `varianta_a/b/c` and `raspuns_corect` columns are kept for backwards
+ * compatibility, but new code should rely on `variante` (jsonb array) and
+ * `raspunsuri_corecte` (text[]) as the source of truth.
+ */
 export type IntrebareRow = {
   id: string | number
   examen_id?: number | null
   intrebare_text: string
-  varianta_a: string
-  varianta_b: string
-  varianta_c: string
-  raspuns_corect: string
+  varianta_a?: string | null
+  varianta_b?: string | null
+  varianta_c?: string | null
+  raspuns_corect?: string | null
+  variante?: unknown
+  raspunsuri_corecte?: unknown
 }
 
 export type PracticeSource = "all" | "bookmarked" | "wrong"
@@ -32,6 +47,17 @@ export type ExamSummary = {
   name: string
   pragTrecere: number
   intrebariSimulare: number
+  /** Max number of variants admins can configure as a default in the rules. */
   varianteRaspuns: number
   durataMinute: number
+}
+
+/** Returns true when two answer-id sets are equivalent (order-independent). */
+export function areAnswerSetsEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  const seen = new Set(a.map((id) => id.toLowerCase()))
+  for (const id of b) {
+    if (!seen.has(id.toLowerCase())) return false
+  }
+  return true
 }

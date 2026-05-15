@@ -11,6 +11,11 @@ import {
   type AdminContext,
 } from "@/lib/auth/admin-context"
 import { isAdminRole, normalizeRole, type AppRole } from "@/lib/auth/roles"
+import {
+  MAX_QUIZ_VARIANTS,
+  MIN_QUIZ_VARIANTS,
+  OPTION_IDS,
+} from "@/lib/quiz/types"
 
 function getAdminServiceClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -112,16 +117,27 @@ async function ensureUserInScope(
 
 type ParsedExamQuestion = {
   intrebare_text: string
+  /** Ordered variant texts (2..10). */
+  variante: string[]
+  /** Lower-case option ids whose Excel cell was filled. */
+  raspunsuri_corecte: string[]
+  /** First three variants mirrored into legacy columns for backwards
+   *  compatibility with code paths that still read `varianta_a/b/c`. */
   varianta_a: string
   varianta_b: string
   varianta_c: string
-  raspuns_corect: "a" | "b" | "c"
+  /** First correct answer mirrored into the legacy single-letter column. */
+  raspuns_corect: string
 }
 
 type ParseExamResult = {
   questions: ParsedExamQuestion[]
   skippedRows: number
 }
+
+// Column B in the import spreadsheet starts the answer variants. The sheet
+// is allowed to have up to `MAX_QUIZ_VARIANTS` variant columns (B..K).
+const MIN_VARIANT_COL = 2
 
 export type AdminStats = {
   totalUtilizatori: number
@@ -133,10 +149,10 @@ export type AdminStats = {
 export type AdminQuestionRow = {
   id: number
   intrebare_text: string
-  varianta_a: string
-  varianta_b: string
-  varianta_c: string
-  raspuns_corect: "a" | "b" | "c"
+  /** Dynamic list of variant texts (length 2..10). */
+  variante: string[]
+  /** Lower-case option ids that are correct (length >= 1). */
+  raspunsuri_corecte: string[]
 }
 
 export type AdminExamRow = {
@@ -177,10 +193,8 @@ export type ExamRulesPayload = {
 
 type UpdateSingleQuestionPayload = {
   intrebare_text: string
-  varianta_a: string
-  varianta_b: string
-  varianta_c: string
-  raspuns_corect: "a" | "b" | "c"
+  variante: string[]
+  raspunsuri_corecte: string[]
 }
 
 export async function updateUserActivity() {
@@ -245,11 +259,25 @@ function hasFill(cell: ExcelJS.Cell) {
   return false
 }
 
-function detectCorrectAnswer(row: ExcelJS.Row): "a" | "b" | "c" | null {
-  if (hasFill(row.getCell(2))) return "a"
-  if (hasFill(row.getCell(3))) return "b"
-  if (hasFill(row.getCell(4))) return "c"
-  return null
+function readVariantTexts(row: ExcelJS.Row): string[] {
+  const collected: string[] = []
+  let lastNonEmpty = -1
+  for (let i = 0; i < MAX_QUIZ_VARIANTS; i++) {
+    const cell = row.getCell(MIN_VARIANT_COL + i)
+    const text = normalizeText(cell.value)
+    collected.push(text)
+    if (text) lastNonEmpty = i
+  }
+  return lastNonEmpty < 0 ? [] : collected.slice(0, lastNonEmpty + 1)
+}
+
+function detectCorrectAnswers(row: ExcelJS.Row, variantCount: number): string[] {
+  const labels: string[] = []
+  for (let i = 0; i < variantCount; i++) {
+    const cell = row.getCell(MIN_VARIANT_COL + i)
+    if (hasFill(cell)) labels.push(OPTION_IDS[i])
+  }
+  return labels
 }
 
 async function parseExamWorkbook(buffer: Buffer): Promise<ParseExamResult> {
@@ -262,26 +290,42 @@ async function parseExamWorkbook(buffer: Buffer): Promise<ParseExamResult> {
   for (const sheet of workbook.worksheets) {
     sheet.eachRow({ includeEmpty: false }, (row) => {
       const intrebare_text = normalizeText(row.getCell(1).value)
-      const varianta_a = normalizeText(row.getCell(2).value)
-      const varianta_b = normalizeText(row.getCell(3).value)
-      const varianta_c = normalizeText(row.getCell(4).value)
+      const variante = readVariantTexts(row)
 
-      if (!intrebare_text && !varianta_a && !varianta_b && !varianta_c) {
+      if (!intrebare_text && variante.length === 0) {
         return
       }
 
-      const raspuns_corect = detectCorrectAnswer(row)
-      if (!intrebare_text || !varianta_a || !varianta_b || !varianta_c || !raspuns_corect) {
+      // Reject rows that don't carry the minimum amount of information
+      // needed to render a quiz question.
+      if (
+        !intrebare_text ||
+        variante.length < MIN_QUIZ_VARIANTS ||
+        variante.some((text) => !text)
+      ) {
+        skippedRows += 1
+        return
+      }
+
+      const raspunsuri_corecte = detectCorrectAnswers(row, variante.length)
+      if (raspunsuri_corecte.length === 0) {
         skippedRows += 1
         return
       }
 
       questions.push({
         intrebare_text,
-        varianta_a,
-        varianta_b,
-        varianta_c,
-        raspuns_corect,
+        variante,
+        raspunsuri_corecte,
+        // Mirror the first three variants & first correct answer into
+        // legacy columns. The DB trigger keeps these in sync going forward,
+        // but writing them here too means any reader that hits the database
+        // immediately (before the trigger-synced copies are visible to a
+        // cache) still sees a consistent question.
+        varianta_a: variante[0] ?? "",
+        varianta_b: variante[1] ?? "",
+        varianta_c: variante[2] ?? "",
+        raspuns_corect: raspunsuri_corecte[0],
       })
     })
   }
@@ -464,6 +508,69 @@ export async function getAdminStats(): Promise<AdminStats> {
   }
 }
 
+function normalizeStoredVariante(raw: unknown, fallbackLegacy: {
+  a?: string | null
+  b?: string | null
+  c?: string | null
+}): string[] {
+  let parsed: unknown = raw
+  if (typeof parsed === "string") {
+    const trimmed = parsed.trim()
+    if (trimmed.startsWith("[")) {
+      try {
+        parsed = JSON.parse(trimmed)
+      } catch {
+        parsed = null
+      }
+    } else {
+      parsed = null
+    }
+  }
+  if (Array.isArray(parsed)) {
+    const cleaned = parsed
+      .map((item) => String(item ?? "").trim())
+      .filter((item) => item.length > 0)
+      .slice(0, MAX_QUIZ_VARIANTS)
+    if (cleaned.length >= MIN_QUIZ_VARIANTS) return cleaned
+  }
+  const legacy = [fallbackLegacy.a, fallbackLegacy.b, fallbackLegacy.c]
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value.length > 0)
+  return legacy
+}
+
+function normalizeStoredCorrectLabels(
+  raw: unknown,
+  legacy: string | null | undefined,
+  allowedIds: Set<string>
+): string[] {
+  let parsed: unknown = raw
+  if (typeof parsed === "string") {
+    const trimmed = parsed.trim()
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        parsed = JSON.parse(trimmed)
+      } catch {
+        parsed = null
+      }
+    } else {
+      parsed = null
+    }
+  }
+  const out = new Set<string>()
+  if (Array.isArray(parsed)) {
+    for (const value of parsed) {
+      const id = String(value ?? "").trim().toLowerCase()
+      if (allowedIds.has(id)) out.add(id)
+    }
+  }
+  if (out.size === 0) {
+    const legacyId = String(legacy ?? "").trim().toLowerCase()
+    if (allowedIds.has(legacyId)) out.add(legacyId)
+  }
+  return Array.from(out).sort()
+}
+
 export async function getQuestionsForExam(examId: number): Promise<AdminQuestionRow[]> {
   const context = await assertAdminActor()
   const adminSupabase = getAdminServiceClient()
@@ -476,7 +583,9 @@ export async function getQuestionsForExam(examId: number): Promise<AdminQuestion
 
   const { data, error } = await adminSupabase
     .from("intrebari")
-    .select("id, intrebare_text, varianta_a, varianta_b, varianta_c, raspuns_corect")
+    .select(
+      "id, intrebare_text, variante, raspunsuri_corecte, varianta_a, varianta_b, varianta_c, raspuns_corect"
+    )
     .eq("examen_id", examId)
     .order("id", { ascending: true })
 
@@ -484,14 +593,29 @@ export async function getQuestionsForExam(examId: number): Promise<AdminQuestion
     throw new Error(error.message)
   }
 
-  return (data ?? []).map((row) => ({
-    id: Number(row.id),
-    intrebare_text: String(row.intrebare_text ?? ""),
-    varianta_a: String(row.varianta_a ?? ""),
-    varianta_b: String(row.varianta_b ?? ""),
-    varianta_c: String(row.varianta_c ?? ""),
-    raspuns_corect: String(row.raspuns_corect ?? "a").toLowerCase() as "a" | "b" | "c",
-  }))
+  return (data ?? [])
+    .map((row) => {
+      const variante = normalizeStoredVariante(row.variante, {
+        a: row.varianta_a as string | null | undefined,
+        b: row.varianta_b as string | null | undefined,
+        c: row.varianta_c as string | null | undefined,
+      })
+      if (variante.length < MIN_QUIZ_VARIANTS) return null
+      const allowedIds = new Set<string>(OPTION_IDS.slice(0, variante.length))
+      const raspunsuri_corecte = normalizeStoredCorrectLabels(
+        row.raspunsuri_corecte,
+        row.raspuns_corect as string | null | undefined,
+        allowedIds
+      )
+      if (raspunsuri_corecte.length === 0) return null
+      return {
+        id: Number(row.id),
+        intrebare_text: String(row.intrebare_text ?? ""),
+        variante,
+        raspunsuri_corecte,
+      }
+    })
+    .filter((row): row is AdminQuestionRow => row !== null)
 }
 
 export async function updateSingleQuestion(id: number, data: UpdateSingleQuestionPayload) {
@@ -512,27 +636,46 @@ export async function updateSingleQuestion(id: number, data: UpdateSingleQuestio
   }
   await ensureExamInScope(adminSupabase, context, Number(questionRow.examen_id))
 
-  const payload: UpdateSingleQuestionPayload = {
-    intrebare_text: String(data.intrebare_text ?? "").trim(),
-    varianta_a: String(data.varianta_a ?? "").trim(),
-    varianta_b: String(data.varianta_b ?? "").trim(),
-    varianta_c: String(data.varianta_c ?? "").trim(),
-    raspuns_corect: String(data.raspuns_corect ?? "")
-      .trim()
-      .toLowerCase() as "a" | "b" | "c",
+  const intrebareText = String(data.intrebare_text ?? "").trim()
+  const variante = Array.isArray(data.variante)
+    ? data.variante
+        .map((value) => String(value ?? "").trim())
+        .filter((value) => value.length > 0)
+        .slice(0, MAX_QUIZ_VARIANTS)
+    : []
+
+  if (!intrebareText || variante.length < MIN_QUIZ_VARIANTS) {
+    throw new Error("Întrebarea trebuie să aibă text și minim 2 variante completate.")
   }
 
-  if (
-    !payload.intrebare_text ||
-    !payload.varianta_a ||
-    !payload.varianta_b ||
-    !payload.varianta_c ||
-    !["a", "b", "c"].includes(payload.raspuns_corect)
-  ) {
-    throw new Error("Datele întrebării sunt incomplete sau invalide.")
+  const allowedIds = new Set<string>(OPTION_IDS.slice(0, variante.length))
+  const raspunsuri: string[] = []
+  if (Array.isArray(data.raspunsuri_corecte)) {
+    for (const value of data.raspunsuri_corecte) {
+      const id = String(value ?? "").trim().toLowerCase()
+      if (allowedIds.has(id) && !raspunsuri.includes(id)) raspunsuri.push(id)
+    }
+  }
+  raspunsuri.sort()
+
+  if (raspunsuri.length === 0) {
+    throw new Error("Selectează cel puțin un răspuns corect.")
   }
 
-  const { error } = await adminSupabase.from("intrebari").update(payload).eq("id", id)
+  const update: Record<string, unknown> = {
+    intrebare_text: intrebareText,
+    variante,
+    raspunsuri_corecte: raspunsuri,
+    // Mirror first 3 variants + first correct answer to the legacy columns
+    // for older consumers. The DB trigger would do this too, but writing it
+    // here keeps PostgREST RETURNING payloads consistent for the UI.
+    varianta_a: variante[0] ?? "",
+    varianta_b: variante[1] ?? "",
+    varianta_c: variante[2] ?? "",
+    raspuns_corect: raspunsuri[0],
+  }
+
+  const { error } = await adminSupabase.from("intrebari").update(update).eq("id", id)
 
   if (error) {
     throw new Error(error.message)
@@ -864,7 +1007,9 @@ export async function updateExamRules(examId: number, rules: ExamRulesPayload) {
     update.intrebari_simulare = value
   }
   if (rules.variante_raspuns != null) {
-    const value = Math.max(2, Math.min(6, Math.floor(Number(rules.variante_raspuns))))
+    // Treated as a "max default" — the quiz interface itself always honors
+    // the actual variant count stored on each question's JSONB column.
+    const value = Math.max(MIN_QUIZ_VARIANTS, Math.min(MAX_QUIZ_VARIANTS, Math.floor(Number(rules.variante_raspuns))))
     if (!Number.isFinite(value)) throw new Error("Număr de variante invalid.")
     update.variante_raspuns = value
   }

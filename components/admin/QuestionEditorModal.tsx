@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition } from "react"
-import { Loader2, Pencil, Save, Trash2, X } from "lucide-react"
+import { Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react"
 import {
   deleteSingleQuestion,
   getQuestionsForExam,
@@ -9,6 +9,12 @@ import {
   type AdminQuestionRow,
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
+import {
+  MAX_QUIZ_VARIANTS,
+  MIN_QUIZ_VARIANTS,
+  OPTION_IDS,
+  OPTION_LABELS,
+} from "@/lib/quiz/types"
 
 type QuestionEditorModalProps = {
   examId: number
@@ -19,10 +25,8 @@ type QuestionEditorModalProps = {
 
 type QuestionDraft = {
   intrebare_text: string
-  varianta_a: string
-  varianta_b: string
-  varianta_c: string
-  raspuns_corect: "a" | "b" | "c"
+  variante: string[]
+  raspunsuri_corecte: string[]
 }
 
 const normalizeText = (text: string) =>
@@ -36,10 +40,16 @@ const normalizeText = (text: string) =>
 function toDraft(question: AdminQuestionRow): QuestionDraft {
   return {
     intrebare_text: question.intrebare_text,
-    varianta_a: question.varianta_a,
-    varianta_b: question.varianta_b,
-    varianta_c: question.varianta_c,
-    raspuns_corect: question.raspuns_corect,
+    variante: [...question.variante],
+    raspunsuri_corecte: [...question.raspunsuri_corecte],
+  }
+}
+
+function trimDraftCorrects(draft: QuestionDraft): QuestionDraft {
+  const allowed = new Set<string>(OPTION_IDS.slice(0, draft.variante.length))
+  return {
+    ...draft,
+    raspunsuri_corecte: draft.raspunsuri_corecte.filter((id) => allowed.has(id)),
   }
 }
 
@@ -78,7 +88,7 @@ export function QuestionEditorModal({
 
     return questions.filter((question) => {
       const haystack = normalizeText(
-        `${question.intrebare_text} ${question.varianta_a} ${question.varianta_b} ${question.varianta_c}`
+        `${question.intrebare_text} ${question.variante.join(" ")}`
       )
       return haystack.includes(needle)
     })
@@ -94,22 +104,86 @@ export function QuestionEditorModal({
     setDraft(toDraft(question))
   }
 
-  const updateDraftField = <K extends keyof QuestionDraft>(key: K, value: QuestionDraft[K]) => {
-    setDraft((current) => (current ? { ...current, [key]: value } : current))
+  const updateVariantText = (index: number, value: string) => {
+    setDraft((current) => {
+      if (!current) return current
+      const variante = [...current.variante]
+      variante[index] = value
+      return { ...current, variante }
+    })
+  }
+
+  const addVariant = () => {
+    setDraft((current) => {
+      if (!current) return current
+      if (current.variante.length >= MAX_QUIZ_VARIANTS) return current
+      return { ...current, variante: [...current.variante, ""] }
+    })
+  }
+
+  const removeVariant = (index: number) => {
+    setDraft((current) => {
+      if (!current) return current
+      if (current.variante.length <= MIN_QUIZ_VARIANTS) return current
+      const variante = current.variante.filter((_, i) => i !== index)
+      const removedId = OPTION_IDS[index]
+      // Drop the removed option from the correct-answers set and re-key
+      // any answers that referenced an option now living at a smaller
+      // index (e.g. removing B shifts C → B).
+      const optionIds = OPTION_IDS as readonly string[]
+      const remappedCorrects = current.raspunsuri_corecte
+        .filter((id) => id !== removedId)
+        .map<string>((id) => {
+          const oldIdx = optionIds.indexOf(id)
+          if (oldIdx > index) return optionIds[oldIdx - 1]
+          return id
+        })
+      return trimDraftCorrects({
+        ...current,
+        variante,
+        raspunsuri_corecte: remappedCorrects,
+      })
+    })
+  }
+
+  const toggleCorrectAnswer = (id: string) => {
+    setDraft((current) => {
+      if (!current) return current
+      const isCurrentlyMarked = current.raspunsuri_corecte.includes(id)
+      const next = isCurrentlyMarked
+        ? current.raspunsuri_corecte.filter((value) => value !== id)
+        : [...current.raspunsuri_corecte, id]
+      next.sort()
+      return { ...current, raspunsuri_corecte: next }
+    })
   }
 
   const handleSave = (questionId: number) => {
     if (!draft) return
+    const cleaned = trimDraftCorrects(draft)
+    const trimmedVariants = cleaned.variante.map((value) => value.trim())
+
+    if (trimmedVariants.some((value) => value.length === 0)) {
+      setError("Toate variantele afișate trebuie să aibă text. Șterge cele goale înainte de salvare.")
+      return
+    }
+    if (trimmedVariants.length < MIN_QUIZ_VARIANTS) {
+      setError(`Sunt necesare cel puțin ${MIN_QUIZ_VARIANTS} variante.`)
+      return
+    }
+    if (cleaned.raspunsuri_corecte.length === 0) {
+      setError("Bifează cel puțin un răspuns corect.")
+      return
+    }
+
     startSavingTransition(() => {
       void (async () => {
         try {
           setError(null)
           await updateSingleQuestion(questionId, {
-            intrebare_text: draft.intrebare_text,
-            varianta_a: draft.varianta_a,
-            varianta_b: draft.varianta_b,
-            varianta_c: draft.varianta_c,
-            raspuns_corect: draft.raspuns_corect,
+            intrebare_text: cleaned.intrebare_text,
+            variante: trimmedVariants,
+            raspunsuri_corecte: cleaned.raspunsuri_corecte,
           })
 
           setQuestions((current) =>
@@ -117,7 +191,9 @@ export function QuestionEditorModal({
               question.id === questionId
                 ? {
                     ...question,
-                    ...draft,
+                    intrebare_text: cleaned.intrebare_text,
+                    variante: trimmedVariants,
+                    raspunsuri_corecte: [...cleaned.raspunsuri_corecte],
                   }
                 : question
             )
@@ -205,6 +281,7 @@ export function QuestionEditorModal({
               {filteredQuestions.map((question, index) => {
                 const isEditing = editingId === question.id && draft != null
                 const isDeleting = deletingId === question.id
+                const correctSet = new Set(question.raspunsuri_corecte)
                 return (
                   <div
                     key={question.id}
@@ -213,6 +290,11 @@ export function QuestionEditorModal({
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <p className="text-xs font-medium text-muted-foreground">
                         Întrebarea #{index + 1} (ID: {question.id})
+                        {question.raspunsuri_corecte.length > 1 ? (
+                          <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                            Multi-răspuns
+                          </span>
+                        ) : null}
                       </p>
                       <div className="flex items-center gap-2">
                         {!isEditing ? (
@@ -268,10 +350,14 @@ export function QuestionEditorModal({
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="block text-xs font-medium text-muted-foreground md:col-span-2">
                         Întrebare
-                        {isEditing ? (
+                        {isEditing && draft ? (
                           <textarea
                             value={draft.intrebare_text}
-                            onChange={(event) => updateDraftField("intrebare_text", event.target.value)}
+                            onChange={(event) =>
+                              setDraft((current) =>
+                                current ? { ...current, intrebare_text: event.target.value } : current
+                              )
+                            }
                             rows={2}
                             className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                           />
@@ -282,43 +368,99 @@ export function QuestionEditorModal({
                         )}
                       </label>
 
-                      {(["varianta_a", "varianta_b", "varianta_c"] as const).map((fieldKey, variantIndex) => (
-                        <label key={fieldKey} className="block text-xs font-medium text-muted-foreground">
-                          Varianta {String.fromCharCode(65 + variantIndex)}
-                          {isEditing ? (
-                            <input
-                              value={draft[fieldKey]}
-                              onChange={(event) => updateDraftField(fieldKey, event.target.value)}
-                              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                            />
-                          ) : (
-                            <p className="mt-1 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
-                              {question[fieldKey]}
-                            </p>
-                          )}
-                        </label>
-                      ))}
-
-                      <label className="block text-xs font-medium text-muted-foreground">
-                        Răspuns corect
-                        {isEditing ? (
-                          <select
-                            value={draft.raspuns_corect}
-                            onChange={(event) =>
-                              updateDraftField("raspuns_corect", event.target.value as "a" | "b" | "c")
-                            }
-                            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm uppercase text-foreground"
-                          >
-                            <option value="a">A</option>
-                            <option value="b">B</option>
-                            <option value="c">C</option>
-                          </select>
-                        ) : (
-                          <p className="mt-1 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium uppercase text-foreground">
-                            {question.raspuns_corect}
+                      {isEditing && draft ? (
+                        <div className="md:col-span-2">
+                          <p className="mb-2 text-xs font-medium text-muted-foreground">
+                            Variante (bifează căsuța din dreapta pentru fiecare răspuns corect)
                           </p>
-                        )}
-                      </label>
+                          <div className="flex flex-col gap-2">
+                            {draft.variante.map((variantText, variantIndex) => {
+                              const optionId = OPTION_IDS[variantIndex]
+                              const isCorrect = draft.raspunsuri_corecte.includes(optionId)
+                              return (
+                                <div
+                                  key={`variant-${variantIndex}`}
+                                  className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5"
+                                >
+                                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-secondary text-xs font-semibold text-foreground">
+                                    {OPTION_LABELS[variantIndex]}
+                                  </span>
+                                  <input
+                                    value={variantText}
+                                    onChange={(event) => updateVariantText(variantIndex, event.target.value)}
+                                    className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                                  />
+                                  <label className="flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+                                    <input
+                                      type="checkbox"
+                                      checked={isCorrect}
+                                      onChange={() => toggleCorrectAnswer(optionId)}
+                                      className="size-4 accent-primary"
+                                      aria-label={`Marchează ${OPTION_LABELS[variantIndex]} ca răspuns corect`}
+                                    />
+                                    Corect
+                                  </label>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => removeVariant(variantIndex)}
+                                    disabled={draft.variante.length <= MIN_QUIZ_VARIANTS}
+                                    aria-label={`Șterge varianta ${OPTION_LABELS[variantIndex]}`}
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </Button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <div className="mt-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={addVariant}
+                              disabled={draft.variante.length >= MAX_QUIZ_VARIANTS}
+                            >
+                              <Plus className="mr-1 size-3.5" />
+                              Adaugă variantă ({draft.variante.length}/{MAX_QUIZ_VARIANTS})
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="md:col-span-2">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {question.variante.map((variantText, variantIndex) => {
+                              const optionId = OPTION_IDS[variantIndex]
+                              const isCorrect = correctSet.has(optionId)
+                              return (
+                                <div
+                                  key={`view-variant-${variantIndex}`}
+                                  className={`flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm ${
+                                    isCorrect
+                                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                      : "border-border bg-card text-foreground"
+                                  }`}
+                                >
+                                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded bg-secondary text-[10px] font-semibold">
+                                    {OPTION_LABELS[variantIndex]}
+                                  </span>
+                                  <span className="min-w-0 flex-1">{variantText}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Răspuns
+                            {question.raspunsuri_corecte.length > 1 ? "uri " : " "}
+                            corect
+                            {question.raspunsuri_corecte.length > 1 ? "e:" : ":"}{" "}
+                            <span className="font-medium uppercase text-foreground">
+                              {question.raspunsuri_corecte.join(", ") || "—"}
+                            </span>
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )

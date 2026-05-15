@@ -778,11 +778,11 @@ export function ExamManagement({
                 />
               </label>
               <label className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Variante răspuns
+                Variante răspuns (max implicit)
                 <input
                   type="number"
                   min={2}
-                  max={6}
+                  max={10}
                   value={rulesDraft.variante_raspuns}
                   onChange={(event) =>
                     setRulesDraft((prev) => ({
@@ -795,6 +795,11 @@ export function ExamManagement({
                 />
               </label>
             </div>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              Notă: &bdquo;Variante răspuns&rdquo; este un maxim implicit. În quiz, fiecare
+              întrebare se afișează exact cu numărul de variante stocat în coloana JSONB{" "}
+              <code>variante</code>.
+            </p>
 
             <div className="mt-5 flex justify-end gap-2">
               <Button
