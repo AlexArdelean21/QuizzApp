@@ -20,10 +20,14 @@ type MistakeReviewProps = {
 // practice session. Each card shows the prompt, the user's choice (muted
 // red) and the correct answer(s) (muted green) so the user can review what
 // went wrong at a glance.
+//
+// The list is a single column constrained to ~3xl so a lone mistake doesn't
+// look stranded on a wide screen and the reading width stays comfortable
+// no matter the count.
 export function MistakeReview({ mistakes, onBack }: MistakeReviewProps) {
   return (
     <div className="min-h-screen bg-background">
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
         <Card className="w-full border-2 border-border/90 bg-card shadow-xl shadow-primary/10 ring-1 ring-primary/15 quiz-question-animate">
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -39,20 +43,23 @@ export function MistakeReview({ mistakes, onBack }: MistakeReviewProps) {
                 type="button"
                 variant="outline"
                 onClick={onBack}
-                className="gap-2"
+                className="h-10 rounded-xl border-2 text-sm font-medium"
               >
                 <ArrowLeft className="size-4" />
                 Înapoi la rezultate
               </Button>
             </div>
             <p className="text-sm text-muted-foreground">
-              {mistakes.length} {mistakes.length === 1 ? "întrebare greșită" : "întrebări greșite"} în sesiunea curentă.
+              {mistakes.length}{" "}
+              {mistakes.length === 1 ? "întrebare greșită" : "întrebări greșite"} în sesiunea curentă.
             </p>
           </CardHeader>
-          <CardContent className="grid gap-4 pt-2 md:grid-cols-2">
-            {mistakes.map((entry, idx) => (
-              <MistakeCard key={entry.question.id} entry={entry} number={idx + 1} />
-            ))}
+          <CardContent className="pt-2">
+            <div className="mx-auto flex w-full flex-col gap-6">
+              {mistakes.map((entry, idx) => (
+                <MistakeCard key={entry.question.id} entry={entry} number={idx + 1} />
+              ))}
+            </div>
           </CardContent>
         </Card>
       </main>
@@ -69,7 +76,7 @@ function MistakeCard({ entry, number }: { entry: MistakeEntry; number: number })
   const userOptions = question.options.filter((option) => userSet.has(option.id))
 
   return (
-    <div className="flex h-full flex-col gap-4 rounded-2xl border-2 border-border/70 bg-secondary/30 p-5 shadow-sm">
+    <div className="flex w-full flex-col gap-5 rounded-2xl border-2 border-border/70 bg-secondary/30 p-6 shadow-sm">
       <div className="flex items-center gap-3">
         <span
           aria-label={`Întrebarea greșită numărul ${number}`}
@@ -80,7 +87,7 @@ function MistakeCard({ entry, number }: { entry: MistakeEntry; number: number })
         >
           {number}
         </span>
-        <span className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <span className="text-sm font-semibold uppercase leading-none tracking-[0.18em] text-muted-foreground">
           Greșeală
         </span>
       </div>
@@ -89,12 +96,12 @@ function MistakeCard({ entry, number }: { entry: MistakeEntry; number: number })
         {question.text}
       </p>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Răspunsul tău</p>
           <div className="mt-2 flex flex-col gap-2">
             {userOptions.length === 0 ? (
-              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">
                 Niciun răspuns selectat
               </div>
             ) : (
@@ -143,7 +150,7 @@ function AnswerPill({
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-lg border px-3 py-2 text-sm",
+        "flex items-start gap-3 rounded-xl border px-4 py-3 text-sm",
         isCorrect
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
           : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"

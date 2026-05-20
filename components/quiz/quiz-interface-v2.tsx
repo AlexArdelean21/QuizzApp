@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { PRIMARY_CTA_CLASS } from "@/lib/utils"
 import { ChevronDown } from "lucide-react"
 import {
   fetchAccessibleExams,
@@ -759,7 +760,7 @@ export function QuizInterface() {
                   {availabilityMessage && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">{availabilityMessage}</p>}
                 </div>
               )}
-              <Button type="button" data-testid="quiz-start" onClick={handleStartQuiz} disabled={noExamAccess || (isPracticeMode && availablePracticeCount === 0) || isAvailabilityLoading} className="w-full rounded-xl bg-white px-8 py-6 text-base font-medium text-black shadow-sm hover:bg-white/90 disabled:opacity-60">
+              <Button type="button" data-testid="quiz-start" onClick={handleStartQuiz} disabled={noExamAccess || (isPracticeMode && availablePracticeCount === 0) || isAvailabilityLoading} className={PRIMARY_CTA_CLASS}>
                 {isAvailabilityLoading ? "Se verifică întrebările..." : "Începe quiz-ul"}
               </Button>
             </CardContent>

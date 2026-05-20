@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { PRIMARY_CTA_CLASS } from "@/lib/utils"
 
 type QuizResultsProps = {
   mode: "simulation" | "practice"
@@ -98,8 +99,7 @@ export function QuizResults({
               <Button
                 type="button"
                 onClick={onViewMistakes}
-                variant="outline"
-                className="w-full rounded-xl border-2 px-8 py-6 text-base font-medium"
+                className={PRIMARY_CTA_CLASS}
               >
                 Vezi greșelile ({mistakeCount})
               </Button>
@@ -108,9 +108,9 @@ export function QuizResults({
             <Button
               type="button"
               onClick={onRestart}
-              className="w-full rounded-xl bg-white px-8 py-6 text-base font-medium text-black shadow-sm hover:bg-white/90"
+              className={PRIMARY_CTA_CLASS}
             >
-              Restart
+              Gata
             </Button>
           </CardContent>
         </Card>
