@@ -11,6 +11,12 @@ type QuizResultsProps = {
   elapsedLabel: string
   finishedByTimeout: boolean
   onRestart: () => void
+  /**
+   * Only meaningful for practice mode. When provided, renders the
+   * "Vezi greșelile" CTA that opens the mistake review.
+   */
+  onViewMistakes?: () => void
+  mistakeCount?: number
 }
 
 export function QuizResults({
@@ -21,6 +27,8 @@ export function QuizResults({
   elapsedLabel,
   finishedByTimeout,
   onRestart,
+  onViewMistakes,
+  mistakeCount = 0,
 }: QuizResultsProps) {
   const wrongCount = totalQuestions - correctCount
   const isPassed = correctCount >= passThreshold
@@ -84,6 +92,17 @@ export function QuizResults({
                 Timpul a expirat — răspunsurile tale au fost evaluate până în acest
                 moment.
               </p>
+            )}
+
+            {onViewMistakes && mistakeCount > 0 && (
+              <Button
+                type="button"
+                onClick={onViewMistakes}
+                variant="outline"
+                className="w-full rounded-xl border-2 px-8 py-6 text-base font-medium"
+              >
+                Vezi greșelile ({mistakeCount})
+              </Button>
             )}
 
             <Button

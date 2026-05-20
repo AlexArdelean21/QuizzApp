@@ -13,9 +13,13 @@ export type ExamStatistics = {
   pragTrecere: number
   intrebariSimulare: number
   pragTrecerePct: number
-  /** % of pool questions answered correctly at least once (any mode). */
+  /**
+   * % of pool questions that are correct on their **latest** attempt. A
+   * previously-correct question that is later answered wrong drops out of
+   * the count.
+   */
   masteryPct: number
-  /** Distinct pool questions correct ≥1× in sim or practice. */
+  /** Distinct pool questions correct on the most recent attempt. */
   distinctCorrectCount: number
   totalQuestionsInPool: number
   /** Distinct questions with any logged attempt (sim + practice). */
@@ -40,8 +44,6 @@ export type SimulationPoint = {
   timedOut: boolean
 }
 
-const PAGE_SIZE = 1000
-
 // Formats a raw duration in seconds for display. The user-facing rule is:
 //   - < 60s  → "Sub 1 min"
 //   - < 60m  → "12 min"
@@ -62,7 +64,7 @@ type ExamRuleRow = {
   intrebari_simulare: number | null
 }
 
-type AnswerHistoryRow = {
+type LatestAnswerRow = {
   intrebare_id: number
   corect: boolean
   data_raspuns: string | null
@@ -83,39 +85,33 @@ function clampPct(value: number): number {
   return Math.max(0, Math.min(100, value))
 }
 
+// Mastery must reflect ONLY the user's most recent answer per question:
+// failing a previously-correct question has to drop the score. The DB does
+// the heavy lifting via `user_latest_answers_for_exam`, which uses
+// `DISTINCT ON (intrebare_id) ORDER BY intrebare_id, data_raspuns DESC` so
+// we get exactly one row per question (the latest).
 async function analyzeAnswerHistory(
   supabase: SupabaseClient,
   userId: string,
   examenId: number
-): Promise<{ attempted: Set<number>; everCorrect: Set<number> }> {
+): Promise<{ attempted: Set<number>; latestCorrect: Set<number> }> {
   const attempted = new Set<number>()
-  const everCorrect = new Set<number>()
-  let from = 0
+  const latestCorrect = new Set<number>()
 
-  for (;;) {
-    const { data, error } = await supabase
-      .from("istoric_raspunsuri")
-      .select("intrebare_id, corect")
-      .eq("user_id", userId)
-      .eq("examen_id", examenId)
-      .order("id", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1)
+  const { data, error } = await supabase.rpc("user_latest_answers_for_exam", {
+    p_user_id: userId,
+    p_examen_id: examenId,
+  })
+  if (error) throw new Error(error.message)
 
-    if (error) throw new Error(error.message)
-    const rows = (data ?? []) as AnswerHistoryRow[]
-
-    for (const row of rows) {
-      const qid = Number(row.intrebare_id)
-      if (!Number.isFinite(qid) || qid <= 0) continue
-      attempted.add(qid)
-      if (row.corect) everCorrect.add(qid)
-    }
-
-    if (rows.length < PAGE_SIZE) break
-    from += PAGE_SIZE
+  for (const row of (data ?? []) as LatestAnswerRow[]) {
+    const qid = Number(row.intrebare_id)
+    if (!Number.isFinite(qid) || qid <= 0) continue
+    attempted.add(qid)
+    if (row.corect) latestCorrect.add(qid)
   }
 
-  return { attempted, everCorrect }
+  return { attempted, latestCorrect }
 }
 
 async function sumPracticeDurationSeconds(
@@ -159,9 +155,9 @@ export async function getExamStatistics(
   if (poolError) throw new Error(poolError.message)
   const poolSize = totalQuestionsInPool ?? 0
 
-  const { attempted, everCorrect } = await analyzeAnswerHistory(supabase, userId, examenId)
+  const { attempted, latestCorrect } = await analyzeAnswerHistory(supabase, userId, examenId)
   const uniqueQuestionsAttempted = attempted.size
-  const distinctCorrectCount = everCorrect.size
+  const distinctCorrectCount = latestCorrect.size
   const masteryPct =
     poolSize > 0 ? clampPct((distinctCorrectCount / poolSize) * 100) : 0
 

@@ -148,6 +148,53 @@ async function fetchQuestionIdsForSource(
   return (data ?? []).map((item) => String(item.intrebare_id))
 }
 
+// "Doar întrebări noi" — questions the user has never attempted. Backed by a
+// LEFT JOIN RPC (`user_unattempted_intrebari`) so the filter is applied in a
+// single round-trip rather than fetching the whole pool client-side.
+async function fetchNewIntrebariRows(
+  supabase: SupabaseClient,
+  userId: string,
+  examenId: number
+): Promise<IntrebareRow[]> {
+  if (!userId || !isValidExamId(examenId)) return []
+  const { data, error } = await supabase.rpc("user_unattempted_intrebari", {
+    p_user_id: userId,
+    p_examen_id: examenId,
+  })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as IntrebareRow[]
+}
+
+async function fetchNewIntrebariCount(
+  supabase: SupabaseClient,
+  userId: string,
+  examenId: number
+): Promise<number> {
+  if (!userId || !isValidExamId(examenId)) return 0
+  const { data, error } = await supabase.rpc("user_unattempted_intrebari_count", {
+    p_user_id: userId,
+    p_examen_id: examenId,
+  })
+  if (error) throw new Error(error.message)
+  return Number(data ?? 0)
+}
+
+export async function fetchNewQuestions(
+  supabase: SupabaseClient,
+  params: { examenId: number; userId: string; count?: number }
+): Promise<QuizQuestion[]> {
+  const { examenId, userId, count } = params
+  const rows = await fetchNewIntrebariRows(supabase, userId, examenId)
+  const mapped = rows
+    .map(mapIntrebareRowToQuestion)
+    .filter((item): item is QuizQuestion => Boolean(item && item.text))
+  if (typeof count !== "number" || count <= 0) {
+    shuffleInPlace(mapped)
+    return mapped
+  }
+  return shuffleInPlaceAndLimit(mapped, count)
+}
+
 export async function getAvailableQuestionCount(
   supabase: SupabaseClient,
   params: { examenId: number; source: PracticeSource; userId: string }
@@ -162,6 +209,10 @@ export async function getAvailableQuestionCount(
       .eq("examen_id", examenId)
     if (error) throw new Error(error.message)
     return count ?? 0
+  }
+
+  if (source === "new") {
+    return fetchNewIntrebariCount(supabase, userId, examenId)
   }
 
   const ids = await fetchQuestionIdsForSource(supabase, userId, examenId, source)
@@ -192,6 +243,10 @@ export async function fetchQuestionsBySource(
       .map(mapIntrebareRowToQuestion)
       .filter((item): item is QuizQuestion => Boolean(item && item.text))
     return shuffleInPlaceAndLimit(mapped, count)
+  }
+
+  if (source === "new") {
+    return fetchNewQuestions(supabase, { examenId, userId, count })
   }
 
   const ids = await fetchQuestionIdsForSource(supabase, userId, examenId, source)

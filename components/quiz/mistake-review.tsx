@@ -1,0 +1,165 @@
+"use client"
+
+import { ArrowLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
+import type { QuizQuestion } from "@/lib/quiz/types"
+
+export type MistakeEntry = {
+  question: QuizQuestion
+  userSelection: string[]
+}
+
+type MistakeReviewProps = {
+  mistakes: MistakeEntry[]
+  onBack: () => void
+}
+
+// Bento-style breakdown of every question the user missed during the
+// practice session. Each card shows the prompt, the user's choice (muted
+// red) and the correct answer(s) (muted green) so the user can review what
+// went wrong at a glance.
+export function MistakeReview({ mistakes, onBack }: MistakeReviewProps) {
+  return (
+    <div className="min-h-screen bg-background">
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
+        <Card className="w-full border-2 border-border/90 bg-card shadow-xl shadow-primary/10 ring-1 ring-primary/15 quiz-question-animate">
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Revedere greșeli
+                </p>
+                <h1 className="text-2xl font-semibold text-foreground md:text-3xl">
+                  Vezi greșelile
+                </h1>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onBack}
+                className="gap-2"
+              >
+                <ArrowLeft className="size-4" />
+                Înapoi la rezultate
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {mistakes.length} {mistakes.length === 1 ? "întrebare greșită" : "întrebări greșite"} în sesiunea curentă.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-4 pt-2 md:grid-cols-2">
+            {mistakes.map((entry, idx) => (
+              <MistakeCard key={entry.question.id} entry={entry} number={idx + 1} />
+            ))}
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  )
+}
+
+function MistakeCard({ entry, number }: { entry: MistakeEntry; number: number }) {
+  const { question, userSelection } = entry
+  const correctSet = new Set(question.correctAnswers)
+  const userSet = new Set(userSelection)
+
+  const correctOptions = question.options.filter((option) => correctSet.has(option.id))
+  const userOptions = question.options.filter((option) => userSet.has(option.id))
+
+  return (
+    <div className="flex h-full flex-col gap-4 rounded-2xl border-2 border-border/70 bg-secondary/30 p-5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span
+          aria-label={`Întrebarea greșită numărul ${number}`}
+          className={cn(
+            "flex size-12 shrink-0 items-center justify-center rounded-xl font-bold leading-none shadow-md ring-2 ring-primary/40",
+            "bg-primary text-primary-foreground text-lg"
+          )}
+        >
+          {number}
+        </span>
+        <span className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Greșeală
+        </span>
+      </div>
+
+      <p className="text-pretty text-base font-medium leading-relaxed text-foreground md:text-lg">
+        {question.text}
+      </p>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Răspunsul tău</p>
+          <div className="mt-2 flex flex-col gap-2">
+            {userOptions.length === 0 ? (
+              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
+                Niciun răspuns selectat
+              </div>
+            ) : (
+              userOptions.map((option) => (
+                <AnswerPill
+                  key={option.id}
+                  label={option.label}
+                  text={option.text}
+                  tone="wrong"
+                />
+              ))
+            )}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">
+            {correctOptions.length > 1 ? "Răspunsuri corecte" : "Răspuns corect"}
+          </p>
+          <div className="mt-2 flex flex-col gap-2">
+            {correctOptions.map((option) => (
+              <AnswerPill
+                key={option.id}
+                label={option.label}
+                text={option.text}
+                tone="correct"
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AnswerPill({
+  label,
+  text,
+  tone,
+}: {
+  label: string
+  text: string
+  tone: "wrong" | "correct"
+}) {
+  const isCorrect = tone === "correct"
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-lg border px-3 py-2 text-sm",
+        isCorrect
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold",
+          isCorrect
+            ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-200"
+            : "bg-rose-500/20 text-rose-700 dark:text-rose-200"
+        )}
+      >
+        {label}
+      </span>
+      <span className="min-w-0 leading-relaxed text-foreground/90">{text}</span>
+    </div>
+  )
+}

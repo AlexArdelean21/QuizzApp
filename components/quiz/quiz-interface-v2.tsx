@@ -21,6 +21,7 @@ import { QuestionCard } from "./question-card"
 import { AnswerOptions } from "./answer-options"
 import { QuizNavigation } from "./quiz-navigation"
 import { QuizResults } from "./quiz-results"
+import { MistakeReview, type MistakeEntry } from "./mistake-review"
 
 const FALLBACK_DURATION_SEC = 30 * 60
 const FALLBACK_QUESTION_COUNT = 25
@@ -29,7 +30,7 @@ const MAX_PRACTICE_QUESTIONS = 100
 const SELECTED_EXAM_STORAGE_KEY = "quiz.selectedExamId"
 
 type QuizMode = "simulation" | "practice"
-type QuizStatus = "setup" | "loading" | "quiz" | "results" | "error"
+type QuizStatus = "setup" | "loading" | "quiz" | "results" | "mistakes" | "error"
 type ExamOption = ExamSummary
 
 type ResultStats = {
@@ -84,6 +85,10 @@ export function QuizInterface() {
   const [timeRemaining, setTimeRemaining] = useState(FALLBACK_DURATION_SEC)
   const [resultStats, setResultStats] = useState<ResultStats | null>(null)
   const [isExitModalOpen, setIsExitModalOpen] = useState(false)
+  // Practice-mode only: every question the user got wrong during the current
+  // session. Populated on commit (single-answer auto-lock or "Verifică") and
+  // surfaced via the "Vezi greșelile" review screen.
+  const [wrongQuestions, setWrongQuestions] = useState<MistakeEntry[]>([])
 
   const selectedExam = useMemo(
     () => examOptions.find((option) => option.id === selectedExamId) ?? null,
@@ -125,6 +130,13 @@ export function QuizInterface() {
     all: "toate",
     bookmarked: "salvate",
     wrong: "greșite anterior",
+    new: "noi",
+  }
+  const sourceOptionLabel: Record<PracticeSource, string> = {
+    all: "Toate",
+    bookmarked: "Salvate",
+    wrong: "Greșite anterior",
+    new: "Doar întrebări noi",
   }
 
   const finalizeQuiz = useCallback((opts: { timedOut: boolean }) => {
@@ -309,6 +321,7 @@ export function QuizInterface() {
     setBookmarkedQuestions(new Set())
     setAnswers({})
     setPracticeLocked(new Set())
+    setWrongQuestions([])
     setTimeRemaining(durationSec)
     try {
       const qs = await fetchQuestionsBySource(supabase, { count: selectedCount, examenId, source: selectedMode === "practice" ? source : "all", userId: currentUserId ?? "" })
@@ -359,6 +372,22 @@ export function QuizInterface() {
     (question: QuizQuestion, finalSelection: string[]) => {
       if (!userId || selectedExamId == null) return
       const isCorrect = areAnswerSetsEqual(finalSelection, question.correctAnswers)
+      if (!isCorrect) {
+        // Snapshot the question + the user's exact selection so the review
+        // screen can replay both sides (their pick vs. the right answer).
+        // Replace any earlier entry for the same question id — a re-attempt
+        // inside the same session shouldn't show twice.
+        setWrongQuestions((prev) => {
+          const filtered = prev.filter((entry) => entry.question.id !== question.id)
+          return [...filtered, { question, userSelection: finalSelection.slice() }]
+        })
+      } else {
+        setWrongQuestions((prev) =>
+          prev.some((entry) => entry.question.id === question.id)
+            ? prev.filter((entry) => entry.question.id !== question.id)
+            : prev
+        )
+      }
       void updateLearningStatus(supabase, {
         userId,
         examenId: selectedExamId,
@@ -501,6 +530,7 @@ export function QuizInterface() {
     setBookmarkedQuestions(new Set())
     setAnswers({})
     setPracticeLocked(new Set())
+    setWrongQuestions([])
     setTimeRemaining(examDurationSec)
     setResultStats(null)
     setErrorMessage(null)
@@ -565,8 +595,30 @@ export function QuizInterface() {
     )
   }
 
+  if (status === "mistakes" && resultStats) {
+    return (
+      <MistakeReview
+        mistakes={wrongQuestions}
+        onBack={() => setStatus("results")}
+      />
+    )
+  }
+
   if (status === "results" && resultStats) {
-    return <QuizResults mode={resultStats.mode} correctCount={resultStats.correct} totalQuestions={resultStats.total} passThreshold={examPassThreshold} elapsedLabel={formatElapsed(resultStats.elapsedMs)} finishedByTimeout={resultStats.timedOut} onRestart={() => setStatus("setup")} />
+    const canViewMistakes = resultStats.mode === "practice" && wrongQuestions.length > 0
+    return (
+      <QuizResults
+        mode={resultStats.mode}
+        correctCount={resultStats.correct}
+        totalQuestions={resultStats.total}
+        passThreshold={examPassThreshold}
+        elapsedLabel={formatElapsed(resultStats.elapsedMs)}
+        finishedByTimeout={resultStats.timedOut}
+        onRestart={resetToSetup}
+        onViewMistakes={canViewMistakes ? () => setStatus("mistakes") : undefined}
+        mistakeCount={wrongQuestions.length}
+      />
+    )
   }
 
   if (status === "setup") {
@@ -664,7 +716,7 @@ export function QuizInterface() {
                       onClick={() => setIsPracticeSourceOpen((prev) => !prev)}
                       className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:hover:border-slate-700"
                     >
-                      <span>{sourceLabelMap[practiceSource].charAt(0).toUpperCase() + sourceLabelMap[practiceSource].slice(1)}</span>
+                      <span>{sourceOptionLabel[practiceSource]}</span>
                       <ChevronDown
                         className={`size-4 text-slate-500 transition-transform dark:text-slate-400 ${isPracticeSourceOpen ? "rotate-180" : ""}`}
                       />
@@ -680,6 +732,7 @@ export function QuizInterface() {
                           { value: "all", label: "Toate" },
                           { value: "bookmarked", label: "Salvate" },
                           { value: "wrong", label: "Greșite anterior" },
+                          { value: "new", label: "Doar întrebări noi" },
                         ] as const).map((option) => (
                           <button
                             key={option.value}

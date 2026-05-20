@@ -40,7 +40,7 @@ export type IntrebareRow = {
   raspunsuri_corecte?: unknown
 }
 
-export type PracticeSource = "all" | "bookmarked" | "wrong"
+export type PracticeSource = "all" | "bookmarked" | "wrong" | "new"
 
 export type ExamSummary = {
   id: number
