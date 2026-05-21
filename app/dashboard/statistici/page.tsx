@@ -1,14 +1,21 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { fetchAccessibleExams } from "@/lib/quiz/fetch-random-intrebari"
-import { getExamStatistics } from "@/lib/quiz/statistics"
-import { StatisticsDashboard } from "@/components/statistici/statistics-dashboard"
+import { StatisticsHeader } from "@/components/statistici/statistics-header"
+import { StatisticsData } from "@/components/statistici/statistics-data"
+import { StatisticsSkeleton } from "@/components/statistici/statistics-skeleton"
 
 // The dashboard is dynamic per-request because it depends on:
 //   - the signed-in user (auth.getUser),
 //   - the `examen` query param (the active exam in the sidebar context).
 // `searchParams` already opts the page into request-time rendering.
+//
+// FCP optimization: only the cheap "who is this user / which exams can they
+// see" work happens before we return JSX. The heavy aggregation lives in
+// <StatisticsData />, which streams in under a Suspense boundary so the
+// header and skeleton paint immediately.
 export default async function StatisticsPage({
   searchParams,
 }: {
@@ -49,13 +56,15 @@ export default async function StatisticsPage({
       ? exams.find((option) => option.id === requestedId)
       : null) ?? exams[0]
 
-  const stats = await getExamStatistics(supabase, user.id, selectedExam.id)
-
   return (
-    <StatisticsDashboard
-      exams={exams}
-      selectedExam={selectedExam}
-      stats={stats}
-    />
+    <main className="relative mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <StatisticsHeader exams={exams} selectedExam={selectedExam} />
+
+      {/* `key` on the boundary forces the skeleton to reappear whenever the
+          user picks a different exam, instead of showing stale data + spinner. */}
+      <Suspense key={selectedExam.id} fallback={<StatisticsSkeleton />}>
+        <StatisticsData userId={user.id} examenId={selectedExam.id} />
+      </Suspense>
+    </main>
   )
 }
