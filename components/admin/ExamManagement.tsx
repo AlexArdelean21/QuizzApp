@@ -21,8 +21,10 @@ import {
   updateExamRules,
   type AdminExamRow,
   type AdminOrganizationRow,
+  type PreviewRow,
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { QuestionEditorModal } from "@/components/admin/QuestionEditorModal"
 
 type ToastState = {
@@ -35,6 +37,13 @@ type ExamManagementProps = {
   organizations: AdminOrganizationRow[]
   isSuperAdmin: boolean
   defaultOrgId: string | null
+}
+
+type PreviewSummary = {
+  total: number
+  new: number
+  duplicate_in_db: number
+  duplicate_in_batch: number
 }
 
 const PAGE_SIZE = 10
@@ -52,7 +61,8 @@ export function ExamManagement({
   const [examName, setExamName] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [createOrgId, setCreateOrgId] = useState<string | null>(defaultOrgId)
-  const [previewCount, setPreviewCount] = useState<number | null>(null)
+  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([])
+  const [previewSummary, setPreviewSummary] = useState<PreviewSummary | null>(null)
   const [previewSkippedRows, setPreviewSkippedRows] = useState(0)
   const [toast, setToast] = useState<ToastState>(null)
   const [editTargetExam, setEditTargetExam] = useState<AdminExamRow | null>(null)
@@ -80,7 +90,7 @@ export function ExamManagement({
   const canCreate =
     Boolean(file) &&
     examName.trim().length > 0 &&
-    previewCount !== null &&
+    previewSummary !== null &&
     !isBusy &&
     (isSuperAdmin ? Boolean(createOrgId) : true)
   const canSaveUpdate =
@@ -126,7 +136,8 @@ export function ExamManagement({
     setShowCreateModal(false)
     setExamName("")
     setFile(null)
-    setPreviewCount(null)
+    setPreviewRows([])
+    setPreviewSummary(null)
     setPreviewSkippedRows(0)
   }
 
@@ -138,15 +149,17 @@ export function ExamManagement({
           const formData = new FormData()
           formData.set("file", file)
           const result = await previewExamImport(formData)
-          setPreviewCount(result.questionCount)
+          setPreviewRows(result.rows)
+          setPreviewSummary(result.summary)
           setPreviewSkippedRows(result.skippedRows)
           pushToast({
             type: "success",
-            message: `Preview gata: ${result.questionCount} întrebări detectate.`,
+            message: `Preview gata: ${result.summary.total} întrebări procesate.`,
           })
         } catch (error) {
           console.error("Preview exam failed:", error)
-          setPreviewCount(null)
+          setPreviewRows([])
+          setPreviewSummary(null)
           setPreviewSkippedRows(0)
           pushToast({
             type: "error",
@@ -172,7 +185,7 @@ export function ExamManagement({
           handleClosePopup()
           pushToast({
             type: "success",
-            message: `Examen creat cu ${result.insertedCount} întrebări (${result.duplicateCount} duplicate ignorate).`,
+            message: `Importate: ${result.inserted} · Sărite (duplicate): ${result.skipped}`,
           })
           router.refresh()
         } catch (error) {
@@ -534,7 +547,8 @@ export function ExamManagement({
                   onChange={(event) => {
                     const next = event.target.files?.[0] ?? null
                     setFile(next)
-                    setPreviewCount(null)
+                    setPreviewRows([])
+                    setPreviewSummary(null)
                     setPreviewSkippedRows(0)
                   }}
                   disabled={isBusy}
@@ -542,13 +556,65 @@ export function ExamManagement({
                 />
               </label>
 
-              {previewCount !== null ? (
-                <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-400">
-                  Întrebări detectate: <strong>{previewCount}</strong>
-                  {previewSkippedRows > 0
-                    ? ` (${previewSkippedRows} rânduri ignorate)`
-                    : ""}
-                </p>
+              {previewSummary ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Total: {previewSummary.total} · Noi: {previewSummary.new} · Duplicate în DB:{" "}
+                    {previewSummary.duplicate_in_db} · Duplicate în fișier:{" "}
+                    {previewSummary.duplicate_in_batch}
+                  </p>
+                  {previewSkippedRows > 0 ? (
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      Rânduri invalide ignorate la parsare: {previewSkippedRows}
+                    </p>
+                  ) : null}
+                  <div className="mt-3 max-h-56 overflow-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+                    <table className="min-w-full text-left text-xs">
+                      <thead className="bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                        <tr>
+                          <th className="px-2 py-2">#</th>
+                          <th className="px-2 py-2">Întrebare</th>
+                          <th className="px-2 py-2">Variante</th>
+                          <th className="px-2 py-2">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {previewRows.map((row) => {
+                          const isDuplicate = row.duplicate_in_db || row.duplicate_in_batch
+                          return (
+                            <tr
+                              key={`${row.idx}-${row.intrebare_text}`}
+                              className={isDuplicate ? "opacity-60" : undefined}
+                            >
+                              <td className="px-2 py-2 align-top text-slate-500 dark:text-slate-400">
+                                {row.idx + 1}
+                              </td>
+                              <td className="px-2 py-2 align-top text-slate-800 dark:text-slate-100">
+                                {row.intrebare_text}
+                              </td>
+                              <td className="px-2 py-2 align-top text-slate-600 dark:text-slate-300">
+                                {row.variante.join(" | ")}
+                              </td>
+                              <td className="px-2 py-2 align-top">
+                                <div className="flex flex-wrap gap-1">
+                                  {row.duplicate_in_db ? (
+                                    <Badge variant="secondary">Duplicat în DB</Badge>
+                                  ) : null}
+                                  {row.duplicate_in_batch ? (
+                                    <Badge variant="outline">Duplicat în fișier</Badge>
+                                  ) : null}
+                                  {!isDuplicate ? (
+                                    <Badge variant="default">Nou</Badge>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               ) : null}
             </div>
 

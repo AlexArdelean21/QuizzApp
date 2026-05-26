@@ -34,6 +34,7 @@ function getAdminServiceClient() {
 }
 
 type AdminServiceClient = ReturnType<typeof getAdminServiceClient>
+type ActorSupabaseClient = Awaited<ReturnType<typeof createSupabaseServerClient>>
 
 async function assertAdminActor(): Promise<AdminContext> {
   try {
@@ -133,6 +134,33 @@ type ParsedExamQuestion = {
 type ParseExamResult = {
   questions: ParsedExamQuestion[]
   skippedRows: number
+}
+
+export type PreviewRow = {
+  idx: number
+  intrebare_text: string
+  variante: string[]
+  raspunsuri_corecte: string[]
+  duplicate_in_db: boolean
+  duplicate_in_batch: boolean
+}
+
+type PreviewSummary = {
+  total: number
+  new: number
+  duplicate_in_db: number
+  duplicate_in_batch: number
+}
+
+type DedupRpcRow = {
+  idx: number
+  content_hash: string
+  duplicate_in_db: boolean
+  duplicate_in_batch: boolean
+}
+
+type PreviewRowWithHash = PreviewRow & {
+  content_hash: string
 }
 
 // Column B in the import spreadsheet starts the answer variants. The sheet
@@ -354,6 +382,103 @@ function getOptionalFileFromFormData(formData: FormData) {
     throw new Error("Fișier invalid. Se acceptă doar .xlsx.")
   }
   return rawFile
+}
+
+function parseOptionalExistingExamId(formData: FormData) {
+  const raw = Number(formData.get("existingExamenId"))
+  return Number.isFinite(raw) && raw > 0 ? raw : null
+}
+
+async function assertImportRoleAndExamScope(
+  actorSupabase: ActorSupabaseClient,
+  context: AdminContext,
+  examId: number | null
+) {
+  const role = normalizeRole(context.role)
+  if (role !== "super_admin" && role !== "org_admin") {
+    throw new Error("Nu ai dreptul să imporți întrebări în examene.")
+  }
+
+  if (examId == null) return null
+
+  const { data: examRow, error: examError } = await actorSupabase
+    .from("examene")
+    .select("id, org_id")
+    .eq("id", examId)
+    .maybeSingle()
+
+  if (examError || !examRow) {
+    throw new Error(examError?.message ?? "Examenul selectat nu există sau nu este accesibil.")
+  }
+
+  const examOrgId = examRow.org_id ? String(examRow.org_id) : null
+  if (role === "org_admin" && examOrgId !== context.orgId) {
+    throw new Error("Nu ai voie să imporți întrebări în examene din alte organizații.")
+  }
+
+  return {
+    id: Number(examRow.id),
+    org_id: examOrgId,
+  }
+}
+
+async function buildPreviewRowsWithDedupRpc(
+  actorSupabase: ActorSupabaseClient,
+  examId: number | null,
+  questions: ParsedExamQuestion[]
+): Promise<{ rows: PreviewRowWithHash[]; summary: PreviewSummary }> {
+  const candidates = questions.map((question) => ({
+    intrebare_text: question.intrebare_text,
+    variante: question.variante,
+  }))
+
+  const { data, error } = await actorSupabase.rpc("preview_intrebari_dedup", {
+    p_examen_id: examId,
+    p_candidates: candidates,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const dedupByIndex = new Map<number, DedupRpcRow>()
+  for (const row of (data ?? []) as DedupRpcRow[]) {
+    dedupByIndex.set(Number(row.idx), {
+      idx: Number(row.idx),
+      content_hash: String(row.content_hash ?? ""),
+      duplicate_in_db: Boolean(row.duplicate_in_db),
+      duplicate_in_batch: Boolean(row.duplicate_in_batch),
+    })
+  }
+
+  const previewRows: PreviewRowWithHash[] = questions.map((question, idx) => {
+    const dedupRow = dedupByIndex.get(idx)
+    return {
+      idx,
+      intrebare_text: question.intrebare_text,
+      variante: [...question.variante],
+      raspunsuri_corecte: [...question.raspunsuri_corecte],
+      duplicate_in_db: dedupRow?.duplicate_in_db ?? false,
+      duplicate_in_batch: dedupRow?.duplicate_in_batch ?? false,
+      content_hash: dedupRow?.content_hash ?? "",
+    }
+  })
+
+  const duplicateInDb = previewRows.filter((row) => row.duplicate_in_db).length
+  const duplicateInBatch = previewRows.filter((row) => row.duplicate_in_batch).length
+  const freshRows = previewRows.filter(
+    (row) => !row.duplicate_in_db && !row.duplicate_in_batch
+  ).length
+
+  return {
+    rows: previewRows,
+    summary: {
+      total: previewRows.length,
+      new: freshRows,
+      duplicate_in_db: duplicateInDb,
+      duplicate_in_batch: duplicateInBatch,
+    },
+  }
 }
 
 function normalizeQuestionKey(text: string) {
@@ -801,23 +926,45 @@ export async function grantExamAccess(
 }
 
 export async function previewExamImport(formData: FormData) {
-  await assertAdminActor()
+  const context = await assertAdminActor()
+  const actorSupabase = await createSupabaseServerClient()
   const file = getFileFromFormData(formData)
   const buffer = Buffer.from(await file.arrayBuffer())
   const parsed = await parseExamWorkbook(buffer)
+  const existingExamId = parseOptionalExistingExamId(formData)
+
+  if (existingExamId != null) {
+    await assertImportRoleAndExamScope(actorSupabase, context, existingExamId)
+  }
+
+  const dedupPreview = await buildPreviewRowsWithDedupRpc(
+    actorSupabase,
+    existingExamId,
+    parsed.questions
+  )
+  const previewRows: PreviewRow[] = dedupPreview.rows.map((row) => ({
+    idx: row.idx,
+    intrebare_text: row.intrebare_text,
+    variante: row.variante,
+    raspunsuri_corecte: row.raspunsuri_corecte,
+    duplicate_in_db: row.duplicate_in_db,
+    duplicate_in_batch: row.duplicate_in_batch,
+  }))
 
   return {
     questionCount: parsed.questions.length,
     skippedRows: parsed.skippedRows,
+    rows: previewRows,
+    summary: dedupPreview.summary,
   }
 }
 
 export async function importExamFromExcel(formData: FormData) {
   const context = await assertAdminActor()
-  const adminSupabase = getAdminServiceClient()
+  const actorSupabase = await createSupabaseServerClient()
 
-  const existingExamenIdRaw = Number(formData.get("existingExamenId"))
-  const hasExistingExamenId = Number.isFinite(existingExamenIdRaw) && existingExamenIdRaw > 0
+  const existingExamenIdRaw = parseOptionalExistingExamId(formData)
+  const hasExistingExamenId = existingExamenIdRaw != null
   const examName = String(formData.get("examName") ?? "").trim()
   const explicitOrgId = String(formData.get("orgId") ?? "").trim() || null
 
@@ -833,9 +980,18 @@ export async function importExamFromExcel(formData: FormData) {
   let createdNewExam = false
 
   if (hasExistingExamenId) {
-    examenId = existingExamenIdRaw
-    await ensureExamInScope(adminSupabase, context, examenId)
+    const inScopeExam = await assertImportRoleAndExamScope(
+      actorSupabase,
+      context,
+      existingExamenIdRaw
+    )
+    if (!inScopeExam) {
+      throw new Error("Examenul selectat nu există.")
+    }
+    examenId = inScopeExam.id
   } else {
+    await assertImportRoleAndExamScope(actorSupabase, context, null)
+
     if (!examName) {
       throw new Error("Numele examenului este obligatoriu.")
     }
@@ -849,7 +1005,7 @@ export async function importExamFromExcel(formData: FormData) {
       throw new Error("Contul tău nu este asociat unei organizații.")
     }
 
-    const { data: createdExam, error: createExamError } = await adminSupabase
+    const { data: createdExam, error: createExamError } = await actorSupabase
       .from("examene")
       .insert({ nume_examen: examName, org_id: targetOrgId })
       .select("id")
@@ -863,38 +1019,82 @@ export async function importExamFromExcel(formData: FormData) {
     examenId = Number(createdExam.id)
   }
 
-  let knownQuestionKeys: Set<string>
+  let dedupPreview: Awaited<ReturnType<typeof buildPreviewRowsWithDedupRpc>>
   try {
-    knownQuestionKeys = await getExistingQuestionKeysForExam(adminSupabase, examenId)
+    dedupPreview = await buildPreviewRowsWithDedupRpc(actorSupabase, examenId, parsed.questions)
   } catch (error) {
     if (createdNewExam) {
-      await adminSupabase.from("examene").delete().eq("id", examenId)
+      await actorSupabase.from("examene").delete().eq("id", examenId)
     }
     throw error
   }
 
-  const { rowsToInsert, duplicateCount } = buildScopedQuestionInsertRows(
-    parsed.questions,
-    examenId,
-    knownQuestionKeys
-  )
+  const firstIndexByHash = new Map<string, number>()
+  const rowsToInsert: Array<{ examen_id: number } & ParsedExamQuestion> = []
+  let skippedDuplicatesBatch = 0
+
+  for (const row of dedupPreview.rows) {
+    const hash = row.content_hash
+    const question = parsed.questions[row.idx]
+    if (!question) continue
+
+    if (!hash) {
+      rowsToInsert.push({
+        examen_id: examenId,
+        ...question,
+      })
+      continue
+    }
+
+    if (firstIndexByHash.has(hash)) {
+      skippedDuplicatesBatch += 1
+      continue
+    }
+
+    firstIndexByHash.set(hash, row.idx)
+    rowsToInsert.push({
+      examen_id: examenId,
+      ...question,
+    })
+  }
+
+  let insertedCount = 0
 
   if (rowsToInsert.length > 0) {
     try {
-      await insertQuestionsInBatches(adminSupabase, rowsToInsert, 100)
+      const { data, error } = await actorSupabase
+        .from("intrebari")
+        .upsert(rowsToInsert, {
+          onConflict: "content_hash",
+          ignoreDuplicates: true,
+        })
+        .select("id")
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      insertedCount = data?.length ?? 0
     } catch (error) {
       if (createdNewExam) {
-        await adminSupabase.from("examene").delete().eq("id", examenId)
+        await actorSupabase.from("examene").delete().eq("id", examenId)
       }
       throw error
     }
   }
 
+  const skippedDuplicatesDb = Math.max(0, rowsToInsert.length - insertedCount)
+  const duplicateCount = skippedDuplicatesBatch + skippedDuplicatesDb
+
   revalidatePath("/admin")
 
   return {
     examenId,
-    insertedCount: rowsToInsert.length,
+    inserted: insertedCount,
+    skipped_duplicates_db: skippedDuplicatesDb,
+    skipped_duplicates_batch: skippedDuplicatesBatch,
+    skipped: duplicateCount,
+    insertedCount,
     skippedRows: parsed.skippedRows,
     duplicateCount,
     createdNewExam,
