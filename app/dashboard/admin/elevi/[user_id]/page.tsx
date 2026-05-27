@@ -64,7 +64,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
 
   const { data: targetProfile } = await supabase
     .from("profiles")
-    .select("id, nume, email, org_id, organizatii(nume)")
+    .select("id, nume, email, org_id, role, organizatii(nume)")
     .eq("id", userId)
     .maybeSingle()
 
@@ -72,24 +72,57 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     notFound()
   }
 
+  const targetRole = normalizeRole(targetProfile.role as string | null | undefined)
+  const targetOrgId = targetProfile.org_id ? String(targetProfile.org_id) : null
+
+  if (!targetOrgId) {
+    notFound()
+  }
+
+  const { data: canViewOrg } = await supabase.rpc("can_view_org_stats", {
+    p_org_id: targetOrgId,
+  })
+  if (!canViewOrg) {
+    notFound()
+  }
+
   const nowIso = new Date().toISOString()
-  const { data: examRows, error: examsError } = await supabase
-    .from("acces_examene")
-    .select("examen_id, examene!inner(id, nume_examen, intrebari_simulare)")
-    .eq("user_id", userId)
-    .or(`data_expirare.is.null,data_expirare.gt.${nowIso}`)
+  let exams: ExamOption[] = []
 
-  if (examsError) throw new Error(examsError.message)
+  if (targetRole === "org_admin" || targetRole === "super_admin") {
+    const { data: examRows, error: examsError } = await supabase
+      .from("examene")
+      .select("id, nume_examen, intrebari_simulare")
+      .eq("org_id", targetOrgId)
+      .order("nume_examen", { ascending: true })
+    if (examsError) throw new Error(examsError.message)
 
-  const exams = ((examRows ?? []) as Array<{
-    examen_id: number
-    examene: { id: number; nume_examen: string | null; intrebari_simulare: number | null } | null
-  }>)
-    .map((row) => ({
-      id: Number(row.examene?.id ?? row.examen_id),
-      nume_examen: String(row.examene?.nume_examen ?? `Examen ${row.examen_id}`),
-      intrebari_simulare: row.examene?.intrebari_simulare ?? null,
+    exams = (examRows ?? []).map((exam) => ({
+      id: Number(exam.id),
+      nume_examen: String(exam.nume_examen ?? `Examen ${exam.id}`),
+      intrebari_simulare: exam.intrebari_simulare ?? null,
     }))
+  } else {
+    const { data: examRows, error: examsError } = await supabase
+      .from("acces_examene")
+      .select("data_expirare, examen_id, examene!inner(id, nume_examen, intrebari_simulare)")
+      .eq("user_id", userId)
+    if (examsError) throw new Error(examsError.message)
+
+    exams = ((examRows ?? []) as Array<{
+      data_expirare: string | null
+      examen_id: number
+      examene: { id: number; nume_examen: string | null; intrebari_simulare: number | null } | null
+    }>)
+      .filter((row) => !row.data_expirare || new Date(row.data_expirare).getTime() > new Date(nowIso).getTime())
+      .map((row) => ({
+        id: Number(row.examene?.id ?? row.examen_id),
+        nume_examen: String(row.examene?.nume_examen ?? `Examen ${row.examen_id}`),
+        intrebari_simulare: row.examene?.intrebari_simulare ?? null,
+      }))
+  }
+
+  exams = exams
     .filter((exam) => Number.isFinite(exam.id) && exam.id > 0)
     .sort((a, b) => a.nume_examen.localeCompare(b.nume_examen, "ro"))
     .filter((exam, idx, arr) => arr.findIndex((candidate) => candidate.id === exam.id) === idx)

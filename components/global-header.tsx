@@ -21,7 +21,11 @@ export function GlobalHeader() {
   const [mounted, setMounted] = useState(false)
   const [theme, setTheme] = useState<Theme>("dark")
   const isLoginRoute = pathname.startsWith("/login")
-  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")
+  const isAdminRoute =
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/") ||
+    pathname === "/dashboard/admin" ||
+    pathname.startsWith("/dashboard/admin/")
   const isStatisticsRoute = pathname === "/dashboard/statistici" || pathname.startsWith("/dashboard/statistici/")
   const canExitQuiz = showExit && pathname === "/"
 
