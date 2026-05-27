@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ReactNode, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import {
+  BarChart3,
   Building2,
   ChevronsLeft,
   ChevronsRight,
@@ -128,6 +129,12 @@ export function AdminLayoutShell({
       label: "Utilizatori",
       icon: Users,
       show: true,
+    },
+    {
+      href: "/dashboard/admin/elevi",
+      label: "Statistici utilizatori",
+      icon: BarChart3,
+      show: role === "super_admin" || role === "org_admin",
     },
     {
       href: "/admin/global",
