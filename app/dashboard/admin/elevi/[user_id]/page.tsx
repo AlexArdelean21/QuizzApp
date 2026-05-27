@@ -109,11 +109,11 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
       .eq("user_id", userId)
     if (examsError) throw new Error(examsError.message)
 
-    exams = ((examRows ?? []) as Array<{
-      data_expirare: string | null
-      examen_id: number
-      examene: { id: number; nume_examen: string | null; intrebari_simulare: number | null } | null
-    }>)
+      exams = ((examRows ?? []) as unknown as Array<{
+        data_expirare: string | null
+        examen_id: number
+        examene: { id: number; nume_examen: string | null; intrebari_simulare: number | null } | null
+      }>)
       .filter((row) => !row.data_expirare || new Date(row.data_expirare).getTime() > new Date(nowIso).getTime())
       .map((row) => ({
         id: Number(row.examene?.id ?? row.examen_id),
