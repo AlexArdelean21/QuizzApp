@@ -132,14 +132,16 @@ export function GlobalHeader() {
           {/* Grid keeps the brand centered in the visible header band (between
               menu and exit), not relative to the full viewport. */}
           <div className="grid h-16 w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Open navigation menu"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-900 dark:hover:text-white"
-            >
-              <Menu className="size-5" />
-            </button>
+            <div className="flex shrink-0 items-center justify-center md:w-10">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Open navigation menu"
+                className="hidden md:inline-flex size-10 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-900 dark:hover:text-white"
+              >
+                <Menu className="size-5" />
+              </button>
+            </div>
 
             <div className="flex min-w-0 justify-center px-1">
               <Link
@@ -150,19 +152,18 @@ export function GlobalHeader() {
               </Link>
             </div>
 
-            <button
-              type="button"
-              onClick={handleRequestExit}
-              aria-label="Exit quiz"
-              disabled={!canExitQuiz}
-              className={`inline-flex size-10 shrink-0 items-center justify-center rounded-md transition ${
-                canExitQuiz
-                  ? "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-900 dark:hover:text-white"
-                  : "pointer-events-none invisible"
-              }`}
-            >
-              <X className="size-5" />
-            </button>
+            <div className="flex shrink-0 items-center justify-center md:w-10">
+              {canExitQuiz && (
+                <button
+                  type="button"
+                  onClick={handleRequestExit}
+                  aria-label="Exit quiz"
+                  className="inline-flex size-10 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-900 dark:hover:text-white"
+                >
+                  <X className="size-5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>

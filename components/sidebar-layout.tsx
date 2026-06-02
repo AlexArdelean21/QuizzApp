@@ -59,7 +59,7 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
     <SidebarContext.Provider value={value}>
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out",
+          "flex min-h-0 min-w-0 flex-1 flex-col pb-20 md:pb-0 transition-all duration-300 ease-in-out",
           // Match fixed aside width (`w-[280px]`). `pl-64` is 256px — use exact
           // width so the push aligns with the panel edge on desktop.
           sidebarOpen && "md:pl-[280px]",

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { GlobalHeader } from "@/components/global-header";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { BottomTabBar } from "@/components/bottom-tab-bar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -54,6 +55,7 @@ export default function RootLayout({
           <GlobalHeader />
           {children}
         </SidebarLayout>
+        <BottomTabBar />
         <SpeedInsights />
       </body>
     </html>
