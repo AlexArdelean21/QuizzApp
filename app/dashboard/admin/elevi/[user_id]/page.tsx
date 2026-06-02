@@ -72,7 +72,6 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     notFound()
   }
 
-  const targetRole = normalizeRole(targetProfile.role as string | null | undefined)
   const targetOrgId = targetProfile.org_id ? String(targetProfile.org_id) : null
 
   if (!targetOrgId) {
@@ -86,46 +85,23 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     notFound()
   }
 
-  const nowIso = new Date().toISOString()
-  let exams: ExamOption[] = []
+  const { data: examRows, error: examsError } = await supabase
+    .from("examene")
+    .select("id, nume_examen, intrebari_simulare")
+    .eq("org_id", targetOrgId)
+    .order("nume_examen", { ascending: true })
 
-  if (targetRole === "org_admin" || targetRole === "super_admin") {
-    const { data: examRows, error: examsError } = await supabase
-      .from("examene")
-      .select("id, nume_examen, intrebari_simulare")
-      .eq("org_id", targetOrgId)
-      .order("nume_examen", { ascending: true })
-    if (examsError) throw new Error(examsError.message)
+  if (examsError) throw new Error(examsError.message)
 
-    exams = (examRows ?? []).map((exam) => ({
-      id: Number(exam.id),
-      nume_examen: String(exam.nume_examen ?? `Examen ${exam.id}`),
-      intrebari_simulare: exam.intrebari_simulare ?? null,
-    }))
-  } else {
-    const { data: examRows, error: examsError } = await supabase
-      .from("acces_examene")
-      .select("data_expirare, examen_id, examene!inner(id, nume_examen, intrebari_simulare)")
-      .eq("user_id", userId)
-    if (examsError) throw new Error(examsError.message)
-
-      exams = ((examRows ?? []) as unknown as Array<{
-        data_expirare: string | null
-        examen_id: number
-        examene: { id: number; nume_examen: string | null; intrebari_simulare: number | null } | null
-      }>)
-      .filter((row) => !row.data_expirare || new Date(row.data_expirare).getTime() > new Date(nowIso).getTime())
-      .map((row) => ({
-        id: Number(row.examene?.id ?? row.examen_id),
-        nume_examen: String(row.examene?.nume_examen ?? `Examen ${row.examen_id}`),
-        intrebari_simulare: row.examene?.intrebari_simulare ?? null,
-      }))
-  }
+  let exams: ExamOption[] = (examRows ?? []).map((exam) => ({
+    id: Number(exam.id),
+    nume_examen: String(exam.nume_examen ?? `Examen ${exam.id}`),
+    intrebari_simulare: exam.intrebari_simulare ?? null,
+  }))
 
   exams = exams
     .filter((exam) => Number.isFinite(exam.id) && exam.id > 0)
-    .sort((a, b) => a.nume_examen.localeCompare(b.nume_examen, "ro"))
-    .filter((exam, idx, arr) => arr.findIndex((candidate) => candidate.id === exam.id) === idx)
+    .filter((exam, idx, arr) => arr.findIndex((c) => c.id === exam.id) === idx)
 
   if (exams.length === 0) {
     return (
@@ -164,6 +140,13 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
   if (!requestedExamId || requestedExamId !== selectedExamId) {
     redirect(`/dashboard/admin/elevi/${userId}?examen_id=${selectedExamId}`)
   }
+
+  const { count: poolSize } = await supabase
+    .from("intrebari")
+    .select("id", { count: "exact", head: true })
+    .eq("examen_id", selectedExamId)
+
+  const totalPoolSize = poolSize ?? 0
 
   const { data, error } = await supabase.rpc("get_student_detail_stats", {
     p_user_id: userId,
@@ -207,7 +190,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
   const scoreAverage =
     safeRow.scor_mediu == null ? "—" : `${Number(safeRow.scor_mediu).toFixed(1)}%`
   const masteryPct = Number(safeRow.nivel_pregatire_pct ?? 0)
-  const distinctCorrect = Math.round((masteryPct / 100) * intrebariSimulare)
+  const distinctCorrect = Math.round((masteryPct / 100) * totalPoolSize)
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -235,7 +218,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
           <MasteryRing
             masteryPct={masteryPct}
             distinctCorrectCount={distinctCorrect}
-            totalQuestions={intrebariSimulare}
+            totalQuestions={totalPoolSize}
             className="lg:col-span-4"
           />
           <EvolutionChart
