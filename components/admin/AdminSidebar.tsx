@@ -5,6 +5,7 @@ import { ReactNode, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
+  BookOpen,
   Building2,
   ChevronsLeft,
   ChevronsRight,
@@ -52,6 +53,68 @@ function roleLabel(role: AppRole): string {
     default:
       return "User"
   }
+}
+
+function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+  const pathname = usePathname()
+  const [hash, setHash] = useState("")
+
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash)
+    setHash(window.location.hash)
+    window.addEventListener("hashchange", onHashChange)
+    return () => window.removeEventListener("hashchange", onHashChange)
+  }, [])
+
+  const isActive = (href: string) => {
+    const [path, h] = href.split("#")
+    if (h) return pathname === path && hash === `#${h}`
+    if (href === "/admin") return pathname === "/admin" && !hash
+    return pathname.startsWith(path)
+  }
+
+  const tabs = [
+    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin#examene", label: "Examene", icon: BookOpen },
+    { href: "/admin#utilizatori", label: "Utilizatori", icon: Users },
+    { href: "/dashboard/admin/elevi", label: "Statistici", icon: BarChart3 },
+    ...(isSuperAdmin
+      ? [{ href: "/admin/global", label: "Organizații", icon: Building2 }]
+      : []),
+  ]
+
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-[130] flex justify-center pb-[env(safe-area-inset-bottom)] md:hidden">
+      <div
+        className={cn(
+          "mx-3 mb-2 flex w-full items-center justify-around",
+          "rounded-2xl border border-border/50 bg-card/80 px-1 py-1",
+          "shadow-lg backdrop-blur-xl dark:bg-card/70",
+          isSuperAdmin ? "max-w-sm" : "max-w-xs"
+        )}
+        style={{ height: "58px" }}
+      >
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const active = isActive(tab.href)
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={cn(
+                "flex flex-1 flex-col items-center justify-center gap-0.5",
+                "py-1 text-[10px] font-medium transition-colors",
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className="size-5" strokeWidth={active ? 2.5 : 1.75} />
+              <span className="leading-none">{tab.label}</span>
+            </Link>
+          )
+        })}
+      </div>
+    </nav>
+  )
 }
 
 export function AdminLayoutShell({
@@ -299,7 +362,7 @@ export function AdminLayoutShell({
           type="button"
           onClick={() => setDrawerOpen(true)}
           aria-label="Deschide meniul"
-          className="inline-flex size-10 items-center justify-center rounded-lg text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900"
+          className="hidden size-10 items-center justify-center rounded-lg text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900 md:inline-flex"
         >
           <Menu className="size-5" />
         </button>
@@ -370,7 +433,8 @@ export function AdminLayoutShell({
         {renderFooter("desktop")}
       </aside>
 
-      <main className="min-h-screen">{children}</main>
+      <main className="min-h-screen pb-20 md:pb-0">{children}</main>
+      <AdminBottomTabBar isSuperAdmin={isSuperAdmin} />
     </div>
   )
 }
