@@ -42,7 +42,7 @@ export function MasteryRing({ masteryPct, distinctCorrectCount, totalQuestions, 
   return (
     <div
       className={cn(
-        "relative flex flex-col items-center gap-6 rounded-2xl border border-border/40 bg-card/55 p-6 shadow-xl shadow-primary/5 ring-1 ring-white/5 backdrop-blur-md",
+        "card-surface relative flex flex-col items-center gap-6 rounded-2xl p-6 shadow-xl shadow-primary/5",
         className,
       )}
     >

@@ -52,20 +52,12 @@ export function AnswerOptions({
             onClick={() => onToggleAnswer(option.id)}
             disabled={isLocked}
             data-testid={`answer-option-${option.id}`}
+            data-selected={isSelected && !showImmediateFeedback}
+            data-correct={showImmediateFeedback && isCorrectShown}
+            data-wrong={showImmediateFeedback && isWrongSelected}
             className={cn(
-              "group relative flex w-full min-w-0 items-center gap-4 rounded-xl border-2 p-5 text-left transition-all duration-200 md:gap-5 md:p-6",
-              !isLocked && "hover:border-primary hover:bg-primary/5 shadow-sm hover:shadow-md",
-              isLocked && "cursor-not-allowed",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              showImmediateFeedback
-                ? isCorrectShown
-                  ? "border-emerald-500 bg-emerald-500/10"
-                  : isWrongSelected
-                    ? "border-rose-500 bg-rose-500/10"
-                    : "border-border bg-card"
-                : isSelected
-                  ? "border-primary bg-primary/10"
-                  : "border-border bg-card"
+              "answer-option group relative flex w-full min-w-0 items-center gap-4 p-5 text-left md:gap-5 md:p-6",
+              isLocked && "cursor-not-allowed"
             )}
           >
             <span
@@ -77,10 +69,10 @@ export function AnswerOptions({
                     ? "bg-emerald-500 text-white"
                     : isWrongSelected
                       ? "bg-rose-500 text-white"
-                      : "bg-secondary text-muted-foreground"
+                      : "bg-muted text-muted-foreground"
                   : isSelected
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-muted-foreground group-hover:bg-primary/15 group-hover:text-foreground"
+                    ? "number-badge"
+                    : "bg-muted text-muted-foreground group-hover:bg-primary/15 group-hover:text-foreground"
               )}
             >
               {option.label}

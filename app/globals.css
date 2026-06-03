@@ -75,119 +75,254 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-@keyframes quiz-question-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* ── Subtle noise texture overlay ── */
+.noise-overlay::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.025;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px;
 }
 
-.quiz-question-animate {
-  animation: quiz-question-in 0.38s ease-out;
+.dark .noise-overlay::before {
+  opacity: 0.04;
 }
 
-@keyframes modal-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes modal-pop-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.modal-backdrop-animate {
-  animation: modal-fade-in 0.18s ease-out;
-}
-
-.modal-card-animate {
-  animation: modal-pop-in 0.22s ease-out;
-}
-
-/* Layered "premium" background used on dashboard surfaces.
-   Layer 1: solid base color comes from the body's bg-* utility.
-   Layer 2: a very subtle dot grid — dots instead of lines so it doesn't
-            read as a math notebook in light mode. Opacity is intentionally
-            low (~2% light, ~4% dark) so the dots are perceived as texture,
-            not a foreground pattern.
-   Layer 3: oversized blurred radial gradients ("aura") rendered as
-            separate fixed divs in `app/layout.tsx` — they pick up
-            `--aura-color-*` from here so they stay theme-aware. */
+/* ── Gradient mesh background ── */
 :root {
-  --grid-dot: rgb(15 23 42 / 0.05);
-  --aura-color-1: rgb(59 130 246 / 0.18);
-  --aura-color-2: rgb(217 70 239 / 0.12);
-  --aura-color-3: rgb(34 211 238 / 0.10);
+  --mesh-1: radial-gradient(ellipse 80% 60% at 10% 20%, rgb(59 130 246 / 0.08), transparent);
+  --mesh-2: radial-gradient(ellipse 60% 80% at 85% 30%, rgb(139 92 246 / 0.06), transparent);
+  --mesh-3: radial-gradient(ellipse 70% 50% at 50% 80%, rgb(14 165 233 / 0.05), transparent);
 }
 
 .dark {
-  --grid-dot: rgb(148 163 184 / 0.08);
-  --aura-color-1: rgb(59 130 246 / 0.22);
-  --aura-color-2: rgb(217 70 239 / 0.18);
-  --aura-color-3: rgb(34 211 238 / 0.14);
+  --mesh-1: radial-gradient(ellipse 80% 60% at 10% 20%, rgb(59 130 246 / 0.12), transparent);
+  --mesh-2: radial-gradient(ellipse 60% 80% at 85% 30%, rgb(139 92 246 / 0.10), transparent);
+  --mesh-3: radial-gradient(ellipse 70% 50% at 50% 80%, rgb(14 165 233 / 0.08), transparent);
 }
 
-.bg-fine-grid {
-  background-image: radial-gradient(circle, var(--grid-dot) 1px, transparent 1.5px);
-  background-size: 22px 22px;
-  background-position: 0 0;
+.bg-mesh {
+  background-image: var(--mesh-1), var(--mesh-2), var(--mesh-3);
 }
 
-@keyframes mastery-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgb(34 197 94 / 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 14px rgb(34 197 94 / 0);
-  }
+/* ── Premium card surface — replaces flat bg-card + border ── */
+.card-surface {
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 4px 16px rgb(0 0 0 / 0.03);
+  border-radius: 1rem;
 }
 
-.mastery-pulse {
-  animation: mastery-pulse 2.4s ease-out infinite;
+.dark .card-surface {
+  background: color-mix(in srgb, var(--card) 65%, transparent);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.03),
+    0 1px 2px rgb(0 0 0 / 0.15),
+    0 4px 16px rgb(0 0 0 / 0.12);
 }
 
-@keyframes aura-drift {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(2%, -1%, 0) scale(1.04);
-  }
+/* ── Question card — gradient left accent ── */
+.question-surface {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  border-left: none;
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgb(0 0 0 / 0.04);
 }
 
-.aura-drift-slow {
-  animation: aura-drift 18s ease-in-out infinite;
+.question-surface::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%);
+  border-radius: 4px 0 0 4px;
 }
 
-.aura-drift-slower {
-  animation: aura-drift 26s ease-in-out infinite reverse;
+.dark .question-surface {
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  box-shadow: 0 4px 24px rgb(0 0 0 / 0.15);
 }
+
+/* ── Answer option styles ── */
+.answer-option {
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1.5px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 0.875rem;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.answer-option:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--card));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.answer-option[data-selected="true"] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+
+.answer-option[data-correct="true"] {
+  border-color: #10b981;
+  background: color-mix(in srgb, #10b981 10%, var(--card));
+  box-shadow: 0 0 0 3px rgb(16 185 129 / 0.15);
+}
+
+.answer-option[data-wrong="true"] {
+  border-color: #f43f5e;
+  background: color-mix(in srgb, #f43f5e 8%, var(--card));
+  box-shadow: 0 0 0 3px rgb(244 63 94 / 0.12);
+}
+
+/* ── Primary gradient button ── */
+.btn-primary {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #3b82f6 100%);
+  color: white;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 1px 3px rgb(37 99 235 / 0.3),
+    0 4px 14px rgb(37 99 235 / 0.15),
+    inset 0 1px 0 rgb(255 255 255 / 0.15);
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  box-shadow:
+    0 2px 6px rgb(37 99 235 / 0.35),
+    0 8px 24px rgb(37 99 235 / 0.2),
+    inset 0 1px 0 rgb(255 255 255 / 0.2);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgb(37 99 235 / 0.3), inset 0 1px 3px rgb(0 0 0 / 0.1);
+}
+
+/* ── Gradient progress bar ── */
+.progress-gradient {
+  background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 40%, #06b6d4 100%);
+  background-size: 200% 100%;
+  animation: shimmer-progress 3s ease infinite;
+}
+
+@keyframes shimmer-progress {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ── Gradient text helper ── */
+.text-gradient {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Number badge (question number) ── */
+.number-badge {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgb(59 130 246 / 0.35);
+}
+
+/* ── Section label ── */
+.section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Card hover lift ── */
+.card-hover {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.06);
+}
+
+.dark .card-hover:hover {
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.2);
+}
+
+/* ── Animations ── */
+@keyframes quiz-question-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.quiz-question-animate {
+  animation: quiz-question-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-pop-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-backdrop-animate { animation: modal-fade-in 0.2s ease-out; }
+.modal-card-animate { animation: modal-pop-in 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
 
 @keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-slide-up {
-  animation: slide-up 0.28s ease-out;
+.animate-slide-up { animation: slide-up 0.28s ease-out; }
+
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
+
+.stagger-in { animation: stagger-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.stagger-in-1 { animation-delay: 50ms; }
+.stagger-in-2 { animation-delay: 100ms; }
+.stagger-in-3 { animation-delay: 150ms; }
+.stagger-in-4 { animation-delay: 200ms; }
+.stagger-in-5 { animation-delay: 250ms; }
+
+@keyframes mastery-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(34 197 94 / 0.35); }
+  50% { box-shadow: 0 0 0 14px rgb(34 197 94 / 0); }
+}
+
+.mastery-pulse { animation: mastery-pulse 2.4s ease-out infinite; }

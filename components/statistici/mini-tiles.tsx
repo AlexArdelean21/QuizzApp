@@ -59,7 +59,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-4 rounded-2xl border border-border/40 bg-card/55 p-5 shadow-lg shadow-primary/5 backdrop-blur-md ring-1",
+        "card-surface relative flex flex-col gap-4 rounded-2xl p-5 shadow-lg shadow-primary/5 ring-1",
         styles.ring,
         className,
       )}

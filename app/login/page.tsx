@@ -4,7 +4,6 @@ import { FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
 type AuthMode = "login" | "signup"
@@ -126,16 +125,14 @@ export default function LoginPage() {
             QuizHub
           </h1>
         </div>
-        <Card className="w-full max-w-md self-center border-2 border-border/90 bg-card shadow-xl shadow-primary/10 ring-1 ring-primary/15">
-          <CardHeader className="pb-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Autentificare
-            </p>
+        <div className="card-surface w-full max-w-md self-center">
+          <div className="px-6 pt-6 pb-2 md:px-8 md:pt-8">
+            <p className="section-label">Autentificare</p>
             <h1 className="text-2xl font-semibold text-foreground md:text-3xl">
               {mode === "login" ? "Conectare" : "Creare cont"}
             </h1>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-5 pt-2">
+          </div>
+          <div className="flex flex-col gap-5 px-6 pb-6 pt-2 md:px-8 md:pb-8">
             <div className="grid grid-cols-2 gap-2 rounded-lg bg-secondary p-1">
               <button
                 type="button"
@@ -146,7 +143,7 @@ export default function LoginPage() {
                 }}
                 className={`rounded-md px-3 py-2 text-sm font-medium transition ${
                   mode === "login"
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-card shadow-sm section-label"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -160,7 +157,7 @@ export default function LoginPage() {
                 }}
                 className={`rounded-md px-3 py-2 text-sm font-medium transition ${
                   mode === "signup"
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-card shadow-sm section-label"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -262,7 +259,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full rounded-xl bg-white py-5 text-base font-medium text-black hover:bg-white/90"
+                className="btn-primary w-full py-3.5 text-base disabled:opacity-60"
               >
                 {isSubmitting
                   ? "Se procesează..."
@@ -280,8 +277,8 @@ export default function LoginPage() {
             >
               Ai uitat parola?
             </button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </main>
     </div>
   )

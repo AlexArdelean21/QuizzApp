@@ -158,7 +158,7 @@ export function BottomTabBar() {
 
       <nav className="fixed inset-x-0 bottom-0 z-[130] flex justify-center pb-[env(safe-area-inset-bottom)] md:hidden">
         <div
-          className="mx-4 mb-2 flex w-full max-w-md items-center justify-around rounded-2xl border border-border/50 bg-card/70 px-2 py-1 shadow-lg shadow-black/5 backdrop-blur-xl dark:bg-card/60 dark:shadow-black/20"
+          className="mx-4 mb-2 flex w-full max-w-md items-center justify-around rounded-2xl border border-border/50 bg-card/75 px-2 py-1 shadow-lg shadow-black/5 ring-1 ring-white/10 backdrop-blur-xl dark:bg-card/60 dark:shadow-black/20 dark:ring-white/5"
           style={{ height: "58px" }}
         >
         {tabs.map((tab) => {

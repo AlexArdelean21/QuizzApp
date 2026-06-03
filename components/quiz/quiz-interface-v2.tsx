@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { PRIMARY_CTA_CLASS } from "@/lib/utils"
 import { ChevronDown } from "lucide-react"
 import {
   fetchAccessibleExams,
@@ -632,12 +630,12 @@ export function QuizInterface() {
     return (
       <div className="min-h-screen bg-background">
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
-          <Card className="w-full border-2 border-border/90 bg-card shadow-xl shadow-primary/10 ring-1 ring-primary/15 quiz-question-animate">
-            <CardHeader className="pb-2">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Setup</p>
+          <div className="card-surface w-full quiz-question-animate">
+            <div className="px-6 pt-6 pb-2 md:px-8 md:pt-8">
+              <p className="section-label">Setup</p>
               <h1 className="text-2xl font-semibold text-foreground md:text-3xl" data-testid="quiz-setup-title">Alege modul de quiz</h1>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6 pt-2">
+            </div>
+            <div className="flex flex-col gap-6 px-6 pb-6 pt-2 md:px-8 md:pb-8">
               <div className="rounded-xl border border-border bg-secondary/30 p-5">
                 <label htmlFor="exam-id" className="text-sm font-medium text-foreground">Examen</label>
                 {noExamAccess ? (
@@ -690,7 +688,7 @@ export function QuizInterface() {
                 )}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <button type="button" data-testid="quiz-mode-simulation" onClick={() => setMode("simulation")} className={`rounded-xl border-2 p-5 text-left transition ${mode === "simulation" ? "border-primary bg-primary/10" : "border-border bg-secondary/30 hover:border-primary/40"}`}>
+                <button type="button" data-testid="quiz-mode-simulation" onClick={() => setMode("simulation")} className={`card-hover rounded-xl border-2 p-5 text-left transition-all duration-200 ${mode === "simulation" ? "border-primary bg-primary/5" : "border-border bg-secondary/30 hover:border-primary/40"}`}>
                   <p className="text-lg font-semibold text-foreground">Simulare Examen</p>
                   {selectedExam ? (
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -698,7 +696,7 @@ export function QuizInterface() {
                     </p>
                   ) : null}
                 </button>
-                <button type="button" data-testid="quiz-mode-practice" onClick={() => setMode("practice")} className={`rounded-xl border-2 p-5 text-left transition ${mode === "practice" ? "border-primary bg-primary/10" : "border-border bg-secondary/30 hover:border-primary/40"}`}>
+                <button type="button" data-testid="quiz-mode-practice" onClick={() => setMode("practice")} className={`card-hover rounded-xl border-2 p-5 text-left transition-all duration-200 ${mode === "practice" ? "border-primary bg-primary/5" : "border-border bg-secondary/30 hover:border-primary/40"}`}>
                   <p className="text-lg font-semibold text-foreground">Mod Practică</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Antrenament fără limită de timp.
@@ -760,11 +758,11 @@ export function QuizInterface() {
                   {availabilityMessage && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">{availabilityMessage}</p>}
                 </div>
               )}
-              <Button type="button" data-testid="quiz-start" onClick={handleStartQuiz} disabled={noExamAccess || (isPracticeMode && availablePracticeCount === 0) || isAvailabilityLoading} className={PRIMARY_CTA_CLASS}>
+              <Button type="button" data-testid="quiz-start" onClick={handleStartQuiz} disabled={noExamAccess || (isPracticeMode && availablePracticeCount === 0) || isAvailabilityLoading} className="btn-primary w-full rounded-xl px-6 py-3.5 text-base disabled:opacity-60">
                 {isAvailabilityLoading ? "Se verifică întrebările..." : "Începe quiz-ul"}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </main>
       </div>
     )
@@ -817,12 +815,12 @@ export function QuizInterface() {
       {isExitModalOpen && (
         <div data-testid="exit-modal" className="fixed inset-0 z-[80] flex items-center justify-center p-4 modal-backdrop-animate">
           <button type="button" aria-label="Închide" onClick={() => setIsExitModalOpen(false)} className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-slate-950/95 p-6 shadow-2xl ring-1 ring-primary/20 modal-card-animate">
-            <h2 className="text-lg font-semibold text-white">Confirmare ieșire</h2>
-            <p className="mt-2 text-sm text-slate-300">Ești sigur că vrei să părăsești quiz-ul? Progresul actual va fi pierdut.</p>
+          <div className="card-surface relative z-10 w-full max-w-sm p-6 shadow-2xl modal-card-animate">
+            <h2 className="text-lg font-semibold text-foreground">Confirmare ieșire</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Ești sigur că vrei să părăsești quiz-ul? Progresul actual va fi pierdut.</p>
             <div className="mt-6 flex items-center justify-end gap-3">
-              <button type="button" data-testid="exit-modal-stay" onClick={() => setIsExitModalOpen(false)} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary/90">Rămân</button>
-              <button type="button" data-testid="exit-modal-confirm" onClick={handleExitQuiz} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-500">Renunță</button>
+              <button type="button" data-testid="exit-modal-stay" onClick={() => setIsExitModalOpen(false)} className="btn-primary px-5 py-2.5 text-sm">Rămân</button>
+              <button type="button" data-testid="exit-modal-confirm" onClick={handleExitQuiz} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-sm font-medium text-rose-600 transition hover:bg-rose-500/20 dark:text-rose-400">Renunță</button>
             </div>
           </div>
         </div>
