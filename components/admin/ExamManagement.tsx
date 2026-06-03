@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   FilePlus2,
@@ -84,6 +85,7 @@ export function ExamManagement({
   const [savingUpdate, startSavingUpdateTransition] = useTransition()
   const [deleting, startDeleteTransition] = useTransition()
   const [savingRules, startSavingRulesTransition] = useTransition()
+  const [collapsed, setCollapsed] = useState(false)
 
   const isBusy = previewing || creating || savingUpdate || deleting || savingRules
   const canPreview = Boolean(file) && !isBusy
@@ -304,9 +306,15 @@ export function ExamManagement({
       className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 pb-4 dark:border-slate-800">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+        <div
+          className="flex-1 cursor-pointer select-none"
+          onClick={() => setCollapsed((prev) => !prev)}
+        >
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
             Exam Management
+            <ChevronDown
+              className={`size-4 text-slate-400 transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
+            />
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Gestionează examenele, întrebările și regulile de simulare.
@@ -322,169 +330,228 @@ export function ExamManagement({
         </Button>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={(event) => {
-              setSearchTerm(event.target.value)
-              setPage(1)
-            }}
-            placeholder="Caută examen..."
-            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500"
-          />
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {filteredExams.length} {filteredExams.length === 1 ? "examen" : "examene"}
-        </p>
-      </div>
+      {!collapsed && (
+        <>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={(event) => {
+                  setSearchTerm(event.target.value)
+                  setPage(1)
+                }}
+                placeholder="Caută examen..."
+                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500"
+              />
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {filteredExams.length} {filteredExams.length === 1 ? "examen" : "examene"}
+            </p>
+          </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200/70 dark:border-slate-800">
-        <table className="min-w-full divide-y divide-slate-200/70 text-sm dark:divide-slate-800">
-          <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-3">Examen</th>
-              {isSuperAdmin && <th className="px-4 py-3">Organizație</th>}
-              <th className="px-4 py-3">Întrebări</th>
-              <th className="px-4 py-3">Reguli simulare</th>
-              <th className="px-4 py-3 text-right">Acțiuni</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200/70 bg-white dark:divide-slate-800 dark:bg-slate-900">
+          {/* Desktop table — hidden on mobile */}
+          <div className="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200/70 dark:border-slate-800 sm:block">
+            <table className="min-w-full divide-y divide-slate-200/70 text-sm dark:divide-slate-800">
+              <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+                <tr>
+                  <th className="px-4 py-3">Examen</th>
+                  {isSuperAdmin && <th className="px-4 py-3">Organizație</th>}
+                  <th className="px-4 py-3">Întrebări</th>
+                  <th className="px-4 py-3">Reguli simulare</th>
+                  <th className="px-4 py-3 text-right">Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200/70 bg-white dark:divide-slate-800 dark:bg-slate-900">
+                {pagedExams.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={isSuperAdmin ? 5 : 4}
+                      className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400"
+                    >
+                      Nu există examene care să corespundă filtrului.
+                    </td>
+                  </tr>
+                ) : (
+                  pagedExams.map((exam) => (
+                    <tr
+                      key={exam.id}
+                      className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60"
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-900 dark:text-white">
+                          {exam.nume_examen}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">ID #{exam.id}</p>
+                      </td>
+                      {isSuperAdmin && (
+                        <td className="px-4 py-3">
+                          <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {exam.org_nume ?? "—"}
+                          </span>
+                        </td>
+                      )}
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                          {exam.question_count}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                        <div className="flex flex-wrap gap-1">
+                          <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                            {exam.intrebari_simulare} întrebări
+                          </span>
+                          <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                            {exam.durata_minute} min
+                          </span>
+                          <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                            prag {exam.prag_trecere}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setQuestionEditorExam(exam)}
+                            disabled={isBusy}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                          >
+                            <Pencil className="size-3.5" /> Întrebări
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRulesModal(exam)}
+                            disabled={isBusy}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                          >
+                            <Settings2 className="size-3.5" /> Reguli
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenUpdateModal(exam)}
+                            disabled={isBusy}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                          >
+                            <Upload className="size-3.5" /> Update
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setDeleteTargetExam(exam); setDeleteConfirmationInput("") }}
+                            disabled={isBusy}
+                            className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
+                          >
+                            <Trash2 className="size-3.5" /> Șterge
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card list — shown only on mobile */}
+          <div className="mt-4 flex flex-col divide-y divide-slate-200/70 overflow-hidden rounded-xl border border-slate-200/70 dark:divide-slate-800 dark:border-slate-800 sm:hidden">
             {pagedExams.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={isSuperAdmin ? 5 : 4}
-                  className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400"
-                >
-                  Nu există examene care să corespundă filtrului.
-                </td>
-              </tr>
+              <p className="px-4 py-8 text-center text-sm text-slate-500">
+                Nu există examene.
+              </p>
             ) : (
               pagedExams.map((exam) => (
-                <tr
-                  key={exam.id}
-                  className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60"
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-slate-900 dark:text-white">
-                      {exam.nume_examen}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">ID #{exam.id}</p>
-                  </td>
-                  {isSuperAdmin && (
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {exam.org_nume ?? "—"}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                <div key={exam.id} className="flex flex-col gap-2 bg-white px-4 py-3 dark:bg-slate-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium leading-tight text-slate-900 dark:text-white">
+                        {exam.nume_examen}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        ID #{exam.id}
+                        {isSuperAdmin && exam.org_nume ? ` · ${exam.org_nume}` : ""}
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                       {exam.question_count}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
-                    <div className="flex flex-wrap gap-1">
-                      <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
-                        {exam.intrebari_simulare} întrebări
-                      </span>
-                      <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
-                        {exam.durata_minute} min
-                      </span>
-                      <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
-                        prag {exam.prag_trecere}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setQuestionEditorExam(exam)}
-                        disabled={isBusy}
-                      >
-                        <Pencil className="mr-1 size-3.5" />
-                        Întrebări
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleOpenRulesModal(exam)}
-                        disabled={isBusy}
-                      >
-                        <Settings2 className="mr-1 size-3.5" />
-                        Reguli
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenUpdateModal(exam)}
-                        disabled={isBusy}
-                      >
-                        <Upload className="mr-1 size-3.5" />
-                        Update
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => {
-                          setDeleteTargetExam(exam)
-                          setDeleteConfirmationInput("")
-                        }}
-                        disabled={isBusy}
-                      >
-                        <Trash2 className="mr-1 size-3.5" />
-                        Șterge
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
+                  </div>
+                  <div className="flex flex-wrap gap-1 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                      {exam.intrebari_simulare} întrebări
+                    </span>
+                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                      {exam.durata_minute} min
+                    </span>
+                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700 dark:bg-slate-800">
+                      prag {exam.prag_trecere}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <button
+                      onClick={() => setQuestionEditorExam(exam)}
+                      className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      <Pencil className="size-3" /> Întrebări
+                    </button>
+                    <button
+                      onClick={() => handleOpenRulesModal(exam)}
+                      className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      <Settings2 className="size-3" /> Reguli
+                    </button>
+                    <button
+                      onClick={() => handleOpenUpdateModal(exam)}
+                      className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      <Upload className="size-3" /> Update
+                    </button>
+                    <button
+                      onClick={() => { setDeleteTargetExam(exam); setDeleteConfirmationInput("") }}
+                      className="ml-auto flex items-center gap-1 rounded-md bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
+                    >
+                      <Trash2 className="size-3" /> Șterge
+                    </button>
+                  </div>
+                </div>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
-
-      {pageCount > 1 && (
-        <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-          <p>
-            Pagina {safePage} din {pageCount}
-          </p>
-          <div className="inline-flex items-center gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              disabled={safePage <= 1}
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
-              disabled={safePage >= pageCount}
-            >
-              <ChevronRight className="size-4" />
-            </Button>
           </div>
-        </div>
-      )}
 
-      {toast ? (
-        <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${toastClasses}`}>
-          {toast.message}
-        </div>
-      ) : null}
+          {pageCount > 1 && (
+            <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <p>
+                Pagina {safePage} din {pageCount}
+              </p>
+              <div className="inline-flex items-center gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safePage <= 1}
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+                  disabled={safePage >= pageCount}
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {toast ? (
+            <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${toastClasses}`}>
+              {toast.message}
+            </div>
+          ) : null}
+        </>
+      )}
 
       {showCreateModal ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">

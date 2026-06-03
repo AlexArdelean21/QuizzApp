@@ -76,14 +76,14 @@ export async function AnalyticsOverview({
         <AdminRefreshButton />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {cards.map((card) => {
           const Icon = card.icon
           const value = result.stats[card.key as StatsCardKey]
           return (
             <article
               key={card.key}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
+              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
             >
               <div
                 className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.accent} opacity-60 transition-opacity group-hover:opacity-100`}
@@ -94,13 +94,13 @@ export async function AnalyticsOverview({
                   <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     {card.title}
                   </p>
-                  <p className="mt-3 text-3xl font-semibold text-slate-900 tabular-nums dark:text-white">
+                  <p className="mt-3 text-2xl font-semibold text-slate-900 tabular-nums dark:text-white sm:text-3xl">
                     {value.toLocaleString("ro-RO")}
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{card.description}</p>
                 </div>
-                <div className={`inline-flex size-10 items-center justify-center rounded-xl ${card.iconBg}`}>
-                  <Icon className="size-5 text-slate-700 dark:text-white" />
+                <div className={`inline-flex size-8 items-center justify-center rounded-xl sm:size-10 ${card.iconBg}`}>
+                  <Icon className="size-4 text-slate-700 dark:text-white sm:size-5" />
                 </div>
               </div>
             </article>
