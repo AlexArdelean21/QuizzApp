@@ -5,11 +5,10 @@ import { ReactNode, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
-  BookOpen,
   Building2,
   ChevronsLeft,
   ChevronsRight,
-  GraduationCap,
+  Home,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -75,12 +74,11 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   const tabs = [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin#examene", label: "Examene", icon: BookOpen },
-    { href: "/admin#utilizatori", label: "Utilizatori", icon: Users },
     { href: "/dashboard/admin/elevi", label: "Statistici", icon: BarChart3 },
     ...(isSuperAdmin
       ? [{ href: "/admin/global", label: "Organizații", icon: Building2 }]
       : []),
+    { href: "/", label: "← Quiz", icon: Home, isBack: true },
   ]
 
   return (
@@ -104,7 +102,11 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-0.5",
                 "py-1 text-[10px] font-medium transition-colors",
-                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                tab.isBack
+                  ? "text-muted-foreground/70 hover:text-foreground"
+                  : active
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Icon className="size-5" strokeWidth={active ? 2.5 : 1.75} />
@@ -179,18 +181,6 @@ export function AdminLayoutShell({
       label: "Dashboard",
       icon: LayoutDashboard,
       exact: true,
-      show: true,
-    },
-    {
-      href: "/admin#examene",
-      label: "Examene",
-      icon: GraduationCap,
-      show: true,
-    },
-    {
-      href: "/admin#utilizatori",
-      label: "Utilizatori",
-      icon: Users,
       show: true,
     },
     {
@@ -312,11 +302,14 @@ export function AdminLayoutShell({
         <Link
           href="/"
           className={cn(
-            "group relative mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-blue-100/85 transition-colors hover:bg-white/10 hover:text-white",
+            "group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium",
+            "border border-border/60 bg-card hover:bg-muted",
+            "text-foreground transition-all hover:border-border",
+            "mt-1",
             isCollapsedDesktop ? "justify-center px-2" : ""
           )}
         >
-          <ChevronsLeft className="size-5 shrink-0" />
+          <Home className="size-4 shrink-0" />
           <span className={cn("truncate", isCollapsedDesktop ? "sr-only" : "")}>
             Înapoi la Quiz
           </span>
