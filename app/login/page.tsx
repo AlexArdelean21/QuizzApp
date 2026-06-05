@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { cn } from "@/lib/utils"
 
 type AuthMode = "login" | "signup"
 
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loginSuccess, setLoginSuccess] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -58,6 +60,10 @@ export default function LoginPage() {
           return
         }
 
+        // Briefly morph the button into a green checkmark before navigating
+        // so the success is visible. The full reload happens right after.
+        setLoginSuccess(true)
+        await new Promise((resolve) => setTimeout(resolve, 700))
         window.location.href = result.redirectTo ?? "/"
         return
       }
@@ -258,14 +264,37 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                disabled={isSubmitting}
-                className="btn-primary w-full py-3.5 text-base disabled:opacity-60"
+                disabled={isSubmitting || loginSuccess}
+                className={cn(
+                  "btn-primary w-full py-3.5 text-base disabled:opacity-60",
+                  loginSuccess && "button-success"
+                )}
               >
-                {isSubmitting
-                  ? "Se procesează..."
-                  : mode === "login"
-                    ? "Conectare"
-                    : "Creare cont"}
+                {loginSuccess ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg
+                      className="check-draw size-5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M5 13l4 4L19 7"
+                        stroke="white"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span>Conectat</span>
+                  </span>
+                ) : isSubmitting ? (
+                  "Se procesează..."
+                ) : mode === "login" ? (
+                  "Conectare"
+                ) : (
+                  "Creare cont"
+                )}
               </Button>
             </form>
 

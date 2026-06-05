@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useRef } from "react"
+import confetti from "canvas-confetti"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { PRIMARY_CTA_CLASS } from "@/lib/utils"
@@ -33,6 +35,68 @@ export function QuizResults({
 }: QuizResultsProps) {
   const wrongCount = totalQuestions - correctCount
   const isPassed = correctCount >= passThreshold
+  // Celebrate only a passed simulation — practice sessions have no pass/fail.
+  const passed = mode === "simulation" && isPassed
+  const hasFiredRef = useRef(false)
+
+  useEffect(() => {
+    if (!passed || hasFiredRef.current) return
+    hasFiredRef.current = true
+
+    // Multi-burst confetti for celebration
+    const duration = 2500
+    const animationEnd = Date.now() + duration
+    const colors = ["#3b82f6", "#8b5cf6", "#06b6d4", "#10b981", "#f59e0b"]
+
+    // Initial big burst
+    confetti({
+      particleCount: 120,
+      spread: 80,
+      origin: { y: 0.6 },
+      colors,
+    })
+
+    // Side bursts after delay
+    const sideTimeout = setTimeout(() => {
+      confetti({
+        particleCount: 60,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.7 },
+        colors,
+      })
+      confetti({
+        particleCount: 60,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.7 },
+        colors,
+      })
+    }, 250)
+
+    // Final sprinkle
+    const interval = setInterval(() => {
+      if (Date.now() > animationEnd) {
+        clearInterval(interval)
+        return
+      }
+      confetti({
+        particleCount: 20,
+        startVelocity: 30,
+        spread: 360,
+        origin: {
+          x: Math.random(),
+          y: Math.random() * 0.3,
+        },
+        colors,
+      })
+    }, 400)
+
+    return () => {
+      clearTimeout(sideTimeout)
+      clearInterval(interval)
+    }
+  }, [passed])
 
   return (
     <div className="min-h-screen bg-background">
