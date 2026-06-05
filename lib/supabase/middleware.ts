@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth"]
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth", "/api/webhooks"]
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
