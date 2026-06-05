@@ -11,6 +11,7 @@ import {
   WrongQuestionsTile,
   SimulationsTile,
 } from "./mini-tiles"
+import { StatsCarousel } from "@/components/ui/stats-carousel"
 
 const ROMANIAN_DATE = new Intl.DateTimeFormat("ro-RO", {
   day: "numeric",
@@ -68,21 +69,44 @@ export function StatisticsBento({ stats }: Props) {
           className="relative z-0 md:col-span-6 lg:col-span-8 lg:row-span-2"
         />
 
+        {/* Mobile carousel — small widgets rotate as a wheel */}
+        <div className="md:hidden">
+          <StatsCarousel>
+            <TimeSpentTile
+              totalLabel={totalTimeLabel}
+              uniqueQuestions={stats.uniqueQuestionsAttempted}
+              className="h-full"
+            />
+            <SimulationsTile
+              total={stats.totalSimulations}
+              passed={stats.passedSimulations}
+              passRateLabel={passRateLabel}
+              className="h-full"
+            />
+            <WrongQuestionsTile
+              count={stats.wrongQuestionsCount}
+              totalQuestions={stats.totalQuestionsInPool}
+              className="h-full"
+            />
+          </StatsCarousel>
+        </div>
+
+        {/* Desktop grid tiles */}
         <TimeSpentTile
           totalLabel={totalTimeLabel}
           uniqueQuestions={stats.uniqueQuestionsAttempted}
-          className="md:col-span-2 lg:col-span-4"
+          className="hidden md:col-span-2 md:flex lg:col-span-4"
         />
         <SimulationsTile
           total={stats.totalSimulations}
           passed={stats.passedSimulations}
           passRateLabel={passRateLabel}
-          className="md:col-span-2 lg:col-span-4"
+          className="hidden md:col-span-2 md:flex lg:col-span-4"
         />
         <WrongQuestionsTile
           count={stats.wrongQuestionsCount}
           totalQuestions={stats.totalQuestionsInPool}
-          className="md:col-span-2 lg:col-span-4"
+          className="hidden md:col-span-2 md:flex lg:col-span-4"
         />
 
         {stats.totalSimulations === 0 && (
