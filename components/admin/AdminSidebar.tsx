@@ -211,6 +211,26 @@ export function AdminLayoutShell({
     return pathname === target || pathname.startsWith(`${target}/`)
   }
 
+  const renderBackToQuizLink = (variant: "drawer" | "desktop") => {
+    const isCollapsedDesktop = variant === "desktop" && collapsed
+    return (
+      <div className="mt-1 border-t border-white/10 pt-2">
+        <Link
+          href="/"
+          onClick={() => setDrawerOpen(false)}
+          className={cn(
+            "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/70 transition hover:bg-white/10 hover:text-white",
+            isCollapsedDesktop ? "justify-center px-2" : ""
+          )}
+        >
+          <Home className="size-4 shrink-0" />
+          <span className={cn(isCollapsedDesktop ? "sr-only" : "")}>Înapoi la Quiz</span>
+          {isCollapsedDesktop ? <span className={NAV_TOOLTIP}>Înapoi la Quiz</span> : null}
+        </Link>
+      </div>
+    )
+  }
+
   const renderNavLink = (item: NavItem, variant: "drawer" | "desktop") => {
     const Icon = item.icon
     const active = isPathActive(item)
@@ -299,23 +319,6 @@ export function AdminLayoutShell({
           ) : null}
         </button>
 
-        <Link
-          href="/"
-          className={cn(
-            "group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium",
-            "border border-border/60 bg-card hover:bg-muted",
-            "text-foreground transition-all hover:border-border",
-            "mt-1",
-            isCollapsedDesktop ? "justify-center px-2" : ""
-          )}
-        >
-          <Home className="size-4 shrink-0" />
-          <span className={cn("truncate", isCollapsedDesktop ? "sr-only" : "")}>
-            Înapoi la Quiz
-          </span>
-          {isCollapsedDesktop ? <span className={NAV_TOOLTIP}>Înapoi la Quiz</span> : null}
-        </Link>
-
         <button
           type="button"
           onClick={handleLogout}
@@ -398,6 +401,7 @@ export function AdminLayoutShell({
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3 pt-2">
           {items.map((item) => renderNavLink(item, "drawer"))}
+          {renderBackToQuizLink("drawer")}
         </nav>
         {renderFooter("drawer")}
       </aside>
@@ -422,6 +426,7 @@ export function AdminLayoutShell({
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3">
           {items.map((item) => renderNavLink(item, "desktop"))}
+          {renderBackToQuizLink("desktop")}
         </nav>
         {renderFooter("desktop")}
       </aside>

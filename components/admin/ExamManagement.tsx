@@ -486,31 +486,35 @@ export function ExamManagement({
                       prag {exam.prag_trecere}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <button
-                      onClick={() => setQuestionEditorExam(exam)}
-                      className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                    >
-                      <Pencil className="size-3" /> Întrebări
-                    </button>
-                    <button
-                      onClick={() => handleOpenRulesModal(exam)}
-                      className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                    >
-                      <Settings2 className="size-3" /> Reguli
-                    </button>
-                    <button
-                      onClick={() => handleOpenUpdateModal(exam)}
-                      className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                    >
-                      <Upload className="size-3" /> Update
-                    </button>
-                    <button
-                      onClick={() => { setDeleteTargetExam(exam); setDeleteConfirmationInput("") }}
-                      className="ml-auto flex items-center gap-1 rounded-md bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
-                    >
-                      <Trash2 className="size-3" /> Șterge
-                    </button>
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setQuestionEditorExam(exam)}
+                        className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                      >
+                        <Pencil className="size-3" /> Întrebări
+                      </button>
+                      <button
+                        onClick={() => handleOpenRulesModal(exam)}
+                        className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                      >
+                        <Settings2 className="size-3" /> Reguli
+                      </button>
+                      <button
+                        onClick={() => handleOpenUpdateModal(exam)}
+                        className="flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                      >
+                        <Upload className="size-3" /> Update
+                      </button>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => { setDeleteTargetExam(exam); setDeleteConfirmationInput("") }}
+                        className="flex items-center gap-1 rounded-md bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
+                      >
+                        <Trash2 className="size-3" /> Șterge
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))

@@ -1,8 +1,7 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { ShieldCheck } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ShieldCheck, Trash2 } from "lucide-react"
 import { deleteUser, grantExamAccess, updateUserRole } from "@/app/admin/actions"
 import type {
   AdminExamRow,
@@ -333,35 +332,34 @@ export function UsersTable({
                               disabled={isPending}
                               className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             />
-                            <Button
+                            <button
                               type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={isPending || examene.length === 0}
                               onClick={() => handleGrantAccess(profile.id)}
+                              disabled={isPending || examene.length === 0}
+                              className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
                               {pendingAction?.type === "grant" && pendingAction.userId === profile.id
-                                ? "Granting..."
+                                ? "Se acordă..."
                                 : "Acordă acces"}
-                            </Button>
+                            </button>
                           </>
                         )}
-                        <Button
+                        <button
                           type="button"
-                          size="sm"
-                          variant="destructive"
+                          onClick={() => handleDeleteUser(profile.id, profile.email)}
                           disabled={isPending || !canDelete}
                           title={
                             isOrgAdminPeer
                               ? "Doar super admin poate șterge un org admin"
                               : undefined
                           }
-                          onClick={() => handleDeleteUser(profile.id, profile.email)}
+                          className="flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-40 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
                         >
+                          <Trash2 className="size-3" />
                           {pendingAction?.type === "delete" && pendingAction.userId === profile.id
-                            ? "Deleting..."
+                            ? "..."
                             : "Șterge"}
-                        </Button>
+                        </button>
                       </div>
                     </td>
                   </tr>
