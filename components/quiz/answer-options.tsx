@@ -29,7 +29,9 @@ export function AnswerOptions({
   onToggleAnswer,
 }: AnswerOptionsProps) {
   const [pulsedId, setPulsedId] = useState<string | null>(null)
+  const [shakeId, setShakeId] = useState<string | null>(null)
   const prevSelectedRef = useRef<Set<string>>(new Set())
+  const prevWrongRef = useRef<Set<string>>(new Set())
   const selectedSet = new Set(selectedAnswers)
   const correctSet = new Set(correctAnswers)
 
@@ -44,6 +46,28 @@ export function AnswerOptions({
     }
     prevSelectedRef.current = currentSet
   }, [selectedAnswers])
+
+  // Shake any option that is revealed as a wrong selection once immediate
+  // feedback turns on. Tracked per-option id so re-renders don't re-trigger.
+  useEffect(() => {
+    if (!showImmediateFeedback) {
+      prevWrongRef.current = new Set()
+      return
+    }
+    const correctIds = new Set(correctAnswers)
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    for (const id of selectedAnswers) {
+      const isWrong = !correctIds.has(id)
+      if (isWrong && !prevWrongRef.current.has(id)) {
+        prevWrongRef.current.add(id)
+        setShakeId(id)
+        timeout = setTimeout(() => setShakeId(null), 450)
+      }
+    }
+    return () => {
+      if (timeout) clearTimeout(timeout)
+    }
+  }, [showImmediateFeedback, selectedAnswers, correctAnswers])
 
   return (
     <div
@@ -73,7 +97,8 @@ export function AnswerOptions({
             className={cn(
               "answer-option group relative flex w-full min-w-0 items-center gap-4 p-5 text-left md:gap-5 md:p-6",
               isLocked && "cursor-not-allowed",
-              pulsedId === option.id && "answer-pulse"
+              pulsedId === option.id && "answer-pulse",
+              shakeId === option.id && "shake-x"
             )}
           >
             <span

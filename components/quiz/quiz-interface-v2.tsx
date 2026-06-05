@@ -82,6 +82,9 @@ export function QuizInterface() {
   // is rendered (mirrors the previous single-answer auto-lock behavior).
   const [practiceLocked, setPracticeLocked] = useState<Set<string>>(() => new Set())
   const [timeRemaining, setTimeRemaining] = useState(FALLBACK_DURATION_SEC)
+  // Practice-mode consecutive-correct streak. Resets on a wrong answer or exit.
+  const [streak, setStreak] = useState(0)
+  const [streakBump, setStreakBump] = useState(false)
   const [resultStats, setResultStats] = useState<ResultStats | null>(null)
   const [isExitModalOpen, setIsExitModalOpen] = useState(false)
   // Practice-mode only: every question the user got wrong during the current
@@ -321,6 +324,8 @@ export function QuizInterface() {
     setAnswers({})
     setPracticeLocked(new Set())
     setWrongQuestions([])
+    setStreak(0)
+    setStreakBump(false)
     setTimeRemaining(durationSec)
     try {
       const qs = await fetchQuestionsBySource(supabase, { count: selectedCount, examenId, source: selectedMode === "practice" ? source : "all", userId: currentUserId ?? "" })
@@ -371,6 +376,13 @@ export function QuizInterface() {
     (question: QuizQuestion, finalSelection: string[]) => {
       if (!userId || selectedExamId == null) return
       const isCorrect = areAnswerSetsEqual(finalSelection, question.correctAnswers)
+      if (isCorrect) {
+        setStreak((prev) => prev + 1)
+        setStreakBump(true)
+        setTimeout(() => setStreakBump(false), 350)
+      } else {
+        setStreak(0)
+      }
       if (!isCorrect) {
         // Snapshot the question + the user's exact selection so the review
         // screen can replay both sides (their pick vs. the right answer).
@@ -530,6 +542,8 @@ export function QuizInterface() {
     setAnswers({})
     setPracticeLocked(new Set())
     setWrongQuestions([])
+    setStreak(0)
+    setStreakBump(false)
     setTimeRemaining(examDurationSec)
     setResultStats(null)
     setErrorMessage(null)
@@ -772,7 +786,17 @@ export function QuizInterface() {
 
   return (
     <div className="min-h-screen bg-background">
-      <QuizHeader currentQuestion={currentIndex + 1} totalQuestions={totalQuestions} timeRemaining={formatClock(timeRemaining)} />
+      <QuizHeader
+        currentQuestion={currentIndex + 1}
+        totalQuestions={totalQuestions}
+        timeRemaining={formatClock(timeRemaining)}
+        // Untimed practice mode shows no timer (and never pulses); the raw
+        // seconds are only forwarded for the simulation urgency check.
+        hasTimer={!isPracticeMode}
+        secondsLeft={isPracticeMode ? undefined : timeRemaining}
+        streak={streak}
+        streakBump={streakBump}
+      />
       <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
         <div key={currentQuestion.id} className="flex w-full flex-col gap-8 md:gap-10 quiz-question-animate">
           <QuestionCard
