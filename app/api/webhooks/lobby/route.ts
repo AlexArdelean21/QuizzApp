@@ -26,6 +26,10 @@ function getString(record: Record<string, unknown>, key: string): string | null 
   return typeof value === "string" && value.trim().length > 0 ? value : null
 }
 
+function isNullish(value: unknown): boolean {
+  return value === null || value === undefined || value === ""
+}
+
 export async function POST(request: NextRequest) {
   const webhookSecret = process.env.SUPABASE_WEBHOOK_SECRET
   const resendApiKey = process.env.RESEND_API_KEY
@@ -50,6 +54,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
+  if (payload.type !== "INSERT") {
+    // Not a new user — ignore silently
+    return NextResponse.json({ ok: true, skipped: "not-insert" }, { status: 200 })
+  }
+
   const record = payload?.record
   if (!record || typeof record !== "object") {
     return NextResponse.json(
@@ -58,12 +67,16 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Only notify for lobby users (org_id IS NULL = unassigned)
+  if (!isNullish(record["org_id"])) {
+    return NextResponse.json({ ok: true, skipped: "already-assigned" }, { status: 200 })
+  }
+
   const email =
     getString(record, "email") ?? getString(record, "user_email") ?? "necunoscut"
   const name =
-    getString(record, "name") ??
-    getString(record, "full_name") ??
-    getString(record, "username") ??
+    getString(record, "nume") ??
+    getString(record, "email") ?? // fallback: use email as display name
     "Utilizator nou"
   const role =
     getString(record, "role") ??
@@ -73,6 +86,9 @@ export async function POST(request: NextRequest) {
   const safeName = escapeHtml(name)
   const safeEmail = escapeHtml(email)
   const safeRole = escapeHtml(role)
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://quizhub.ro"
+  const lobbyUrl = `${appUrl}/admin`
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
@@ -96,6 +112,12 @@ export async function POST(request: NextRequest) {
           </tr>
         </tbody>
       </table>
+      <a href="${lobbyUrl}"
+         style="display:inline-block;margin:20px 0 0;padding:12px 24px;
+                background:#111827;color:#ffffff;text-decoration:none;
+                border-radius:8px;font-size:14px;font-weight:600;">
+        Accesează lobby →
+      </a>
       <p style="margin: 24px 0 0; font-size: 13px; color: #6b7280;">
         Acest mesaj a fost trimis automat de QuizHub.
       </p>
