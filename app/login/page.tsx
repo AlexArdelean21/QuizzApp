@@ -1,7 +1,6 @@
 "use client"
 
 import { FormEvent, useState } from "react"
-import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
@@ -21,8 +20,7 @@ export default function LoginPage() {
   const [loginSuccess, setLoginSuccess] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  const router = useRouter()
+  const [signupDone, setSignupDone] = useState(false)
 
   const clearFeedback = () => {
     setMessage(null)
@@ -79,8 +77,7 @@ export default function LoginPage() {
         return
       }
 
-      router.push("/")
-      router.refresh()
+      setSignupDone(true)
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "A apărut o eroare neașteptată."
@@ -131,6 +128,49 @@ export default function LoginPage() {
             QuizHub
           </h1>
         </div>
+        {signupDone ? (
+          <div className="card-surface w-full max-w-md self-center">
+            <div className="flex flex-col items-center gap-4 px-6 py-10 text-center md:px-8">
+              <div className="flex size-16 items-center justify-center rounded-full bg-emerald-500/10">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="size-8 text-emerald-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+                  />
+                </svg>
+              </div>
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xl font-semibold text-foreground">
+                  Verifică-ți emailul
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Am trimis un link de confirmare la{" "}
+                  <span className="font-medium text-foreground">{email}</span>.
+                  Accesează linkul pentru a-ți activa contul.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Nu ai primit emailul? Verifică folderul spam sau{" "}
+                <button
+                  type="button"
+                  className="text-primary underline-offset-4 hover:underline"
+                  onClick={() => setSignupDone(false)}
+                >
+                  încearcă din nou
+                </button>
+                .
+              </p>
+            </div>
+          </div>
+        ) : (
         <div className="card-surface w-full max-w-md self-center">
           <div className="px-6 pt-6 pb-2 md:px-8 md:pt-8">
             <p className="section-label">Autentificare</p>
@@ -308,6 +348,7 @@ export default function LoginPage() {
             </button>
           </div>
         </div>
+        )}
       </main>
     </div>
   )
