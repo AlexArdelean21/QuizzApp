@@ -57,6 +57,12 @@ function roleLabel(role: AppRole): string {
 function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const pathname = usePathname()
   const [hash, setHash] = useState("")
+  const [bouncedKey, setBouncedKey] = useState<string | null>(null)
+
+  const handleTabTap = (key: string) => {
+    setBouncedKey(key)
+    setTimeout(() => setBouncedKey(null), 400)
+  }
 
   useEffect(() => {
     const onHashChange = () => setHash(window.location.hash)
@@ -99,6 +105,7 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             <Link
               key={tab.href}
               href={tab.href}
+              onClick={() => handleTabTap(tab.href)}
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-0.5",
                 "py-1 text-[10px] font-medium transition-colors",
@@ -109,7 +116,10 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                     : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Icon className="size-5" strokeWidth={active ? 2.5 : 1.75} />
+              <Icon
+                className={cn("size-5", bouncedKey === tab.href && "tab-bounce")}
+                strokeWidth={active ? 2.5 : 1.75}
+              />
               <span className="leading-none">{tab.label}</span>
             </Link>
           )

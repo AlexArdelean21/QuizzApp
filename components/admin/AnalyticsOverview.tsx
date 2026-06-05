@@ -1,6 +1,7 @@
 import { Activity, BookOpen, HelpCircle, Users } from "lucide-react"
 import { getAdminStats } from "@/app/admin/actions"
 import { AdminRefreshButton } from "@/components/admin/AdminRefreshButton"
+import { AnimatedNumber } from "@/components/admin/AnimatedNumber"
 
 const cards = [
   {
@@ -77,13 +78,14 @@ export async function AnalyticsOverview({
       </div>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {cards.map((card) => {
+        {cards.map((card, idx) => {
           const Icon = card.icon
           const value = result.stats[card.key as StatsCardKey]
           return (
             <article
               key={card.key}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
+              style={{ animationDelay: `${idx * 60}ms` }}
+              className="stagger-in group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
             >
               <div
                 className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.accent} opacity-60 transition-opacity group-hover:opacity-100`}
@@ -94,8 +96,8 @@ export async function AnalyticsOverview({
                   <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     {card.title}
                   </p>
-                  <p className="mt-3 text-2xl font-semibold text-slate-900 tabular-nums dark:text-white sm:text-3xl">
-                    {value.toLocaleString("ro-RO")}
+                  <p className="mt-3 text-2xl font-semibold text-slate-900 sm:text-3xl dark:text-white">
+                    <AnimatedNumber value={value} />
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{card.description}</p>
                 </div>

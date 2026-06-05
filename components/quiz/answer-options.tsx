@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 
 interface AnswerOption {
@@ -27,8 +28,22 @@ export function AnswerOptions({
   multiple,
   onToggleAnswer,
 }: AnswerOptionsProps) {
+  const [pulsedId, setPulsedId] = useState<string | null>(null)
+  const prevSelectedRef = useRef<Set<string>>(new Set())
   const selectedSet = new Set(selectedAnswers)
   const correctSet = new Set(correctAnswers)
+
+  useEffect(() => {
+    const currentSet = new Set(selectedAnswers)
+    const justAdded = [...currentSet].find((id) => !prevSelectedRef.current.has(id))
+    if (justAdded) {
+      setPulsedId(justAdded)
+      const t = setTimeout(() => setPulsedId(null), 500)
+      prevSelectedRef.current = currentSet
+      return () => clearTimeout(t)
+    }
+    prevSelectedRef.current = currentSet
+  }, [selectedAnswers])
 
   return (
     <div
@@ -57,7 +72,8 @@ export function AnswerOptions({
             data-wrong={showImmediateFeedback && isWrongSelected}
             className={cn(
               "answer-option group relative flex w-full min-w-0 items-center gap-4 p-5 text-left md:gap-5 md:p-6",
-              isLocked && "cursor-not-allowed"
+              isLocked && "cursor-not-allowed",
+              pulsedId === option.id && "answer-pulse"
             )}
           >
             <span

@@ -26,6 +26,12 @@ export function BottomTabBar() {
   const [theme, setTheme] = useState<Theme>("dark")
   const [quizActive, setQuizActive] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [bouncedKey, setBouncedKey] = useState<string | null>(null)
+
+  const handleTabTap = (key: string) => {
+    setBouncedKey(key)
+    setTimeout(() => setBouncedKey(null), 400)
+  }
 
   useEffect(() => {
     const resolveAdminRole = async () => {
@@ -170,12 +176,17 @@ export function BottomTabBar() {
               <Link
                 key={tab.key}
                 href={tab.href}
+                onClick={() => handleTabTap(tab.key)}
                 className={cn(
                   "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
                   active ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                <Icon size={22} strokeWidth={active ? 2.5 : 1.75} />
+                <Icon
+                  size={22}
+                  strokeWidth={active ? 2.5 : 1.75}
+                  className={cn(bouncedKey === tab.key && "tab-bounce")}
+                />
                 <span>{tab.label}</span>
               </Link>
             )
@@ -185,10 +196,17 @@ export function BottomTabBar() {
             <button
               key={tab.key}
               type="button"
-              onClick={tab.onClick}
+              onClick={() => {
+                handleTabTap(tab.key)
+                tab.onClick?.()
+              }}
               className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium text-muted-foreground transition-colors"
             >
-              <Icon size={22} strokeWidth={1.75} />
+              <Icon
+                size={22}
+                strokeWidth={1.75}
+                className={cn(bouncedKey === tab.key && "tab-bounce")}
+              />
               <span>{tab.label}</span>
             </button>
           )

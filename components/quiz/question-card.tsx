@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Bookmark } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -23,6 +24,19 @@ export function QuestionCard({
   onToggleBookmark,
   isMultipleChoice = false,
 }: QuestionCardProps) {
+  const [pop, setPop] = useState(false)
+  const prevBookmarkedRef = useRef(isBookmarked)
+
+  useEffect(() => {
+    if (!prevBookmarkedRef.current && isBookmarked) {
+      setPop(true)
+      const t = setTimeout(() => setPop(false), 400)
+      prevBookmarkedRef.current = isBookmarked
+      return () => clearTimeout(t)
+    }
+    prevBookmarkedRef.current = isBookmarked
+  }, [isBookmarked])
+
   return (
     <div className="question-surface w-full p-6 md:p-8">
       <div className="flex items-center justify-between gap-4 mb-5">
@@ -57,7 +71,13 @@ export function QuestionCard({
           )}
           aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
         >
-          <Bookmark className={cn("size-5", isBookmarked && "fill-current")} />
+          <Bookmark
+            className={cn(
+              "size-5 transition-colors",
+              isBookmarked && "fill-current",
+              pop && "bookmark-pop"
+            )}
+          />
         </Button>
       </div>
       <p className="text-pretty text-xl font-medium leading-relaxed text-foreground md:text-2xl">

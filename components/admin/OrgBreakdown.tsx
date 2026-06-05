@@ -58,15 +58,16 @@ export function OrgBreakdown({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {orgs.map((org) => {
+        {orgs.map((org, idx) => {
           const isSelected = selectedOrgId === org.orgId
           return (
             <button
               key={org.orgId}
               type="button"
+              style={{ animationDelay: `${idx * 50}ms` }}
               onClick={() => onSelectOrg(isSelected ? null : org.orgId)}
               className={[
-                "group relative w-full cursor-pointer overflow-hidden rounded-2xl border p-5 text-left shadow-sm",
+                "stagger-in group relative w-full cursor-pointer overflow-hidden rounded-2xl border p-5 text-left shadow-sm",
                 "transition-all duration-150 hover:-translate-y-1 hover:shadow-md active:scale-[0.98]",
                 isSelected
                   ? "border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/30 dark:bg-blue-900/20 dark:ring-blue-500/20"
@@ -146,9 +147,10 @@ export function OrgBreakdown({
           return (
             <button
               type="button"
+              style={{ animationDelay: `${orgs.length * 50}ms` }}
               onClick={() => onSelectOrg(isSelected ? null : LOBBY_KEY)}
               className={[
-                "group relative w-full cursor-pointer overflow-hidden rounded-2xl border p-5 text-left shadow-sm",
+                "stagger-in group relative w-full cursor-pointer overflow-hidden rounded-2xl border p-5 text-left shadow-sm",
                 "transition-all duration-150 hover:-translate-y-1 hover:shadow-md active:scale-[0.98]",
                 isSelected
                   ? "border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/30 dark:bg-amber-900/20 dark:ring-amber-500/20"

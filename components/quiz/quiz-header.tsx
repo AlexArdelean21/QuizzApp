@@ -1,6 +1,5 @@
 "use client"
 
-import { Progress } from "@/components/ui/progress"
 import { Clock } from "lucide-react"
 
 interface QuizHeaderProps {
@@ -14,7 +13,7 @@ export function QuizHeader({
   totalQuestions,
   timeRemaining,
 }: QuizHeaderProps) {
-  const progressValue = (currentQuestion / totalQuestions) * 100
+  const progressPercent = (currentQuestion / totalQuestions) * 100
 
   return (
     <div className="w-full bg-background/85 backdrop-blur-md">
@@ -23,8 +22,11 @@ export function QuizHeader({
           <span className="hidden shrink-0 text-xs text-muted-foreground md:block whitespace-nowrap">
             Question {currentQuestion} of {totalQuestions}
           </span>
-          <div className="min-w-0 w-full max-w-md">
-            <Progress value={progressValue} className="h-2" />
+          <div className="relative h-2 min-w-0 w-full max-w-md overflow-hidden rounded-full bg-primary/20">
+            <div
+              className="progress-smooth progress-gradient h-full rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
           <span className="shrink-0 text-xs text-muted-foreground md:hidden">
             {currentQuestion}/{totalQuestions}
