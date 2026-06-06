@@ -30,14 +30,9 @@ export function useAppSidebar(): SidebarContextValue {
 }
 
 /**
- * Wraps header + routed pages so that when the nav drawer opens on `md+`,
- * content shifts right instead of sitting under the fixed panel.
- * Aura layers remain `fixed` to the viewport in `layout.tsx`, so they stay
- * visually consistent when padding changes.
- *
- * On small screens the drawer is an overlay (no inset). From `md` up, the
- * main column gets left padding equal to the drawer width so header titles
- * and page content center in the *remaining* viewport, not the full screen.
+ * Wraps header + routed pages. The nav drawer is a pure overlay on all
+ * viewports — it never shifts the main content, so bg-mesh and noise-overlay
+ * never repaint during animation.
  */
 export function SidebarLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -58,12 +53,7 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarContext.Provider value={value}>
       <div
-        className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col pb-20 md:pb-0 transition-all duration-300 ease-in-out",
-          // Match fixed aside width (`w-[280px]`). `pl-64` is 256px — use exact
-          // width so the push aligns with the panel edge on desktop.
-          sidebarOpen && "md:pl-[280px]",
-        )}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
         style={
           {
             ["--app-sidebar-width" as string]: `${SIDEBAR_WIDTH_PX}px`,

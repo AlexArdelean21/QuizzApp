@@ -8,6 +8,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useTrackActivity } from "@/hooks/use-track-activity"
 import { isAdminRole } from "@/lib/auth/roles"
 import { useAppSidebar } from "@/components/sidebar-layout"
+import { cn } from "@/lib/utils"
 
 type Theme = "light" | "dark"
 
@@ -177,19 +178,32 @@ export function GlobalHeader() {
         </div>
       </header>
 
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="Close sidebar backdrop"
-          onClick={() => closeSidebar()}
-          className="fixed inset-0 z-[125] bg-black/60 backdrop-blur-sm transition-opacity duration-300"
-        />
-      )}
+      {/* Backdrop — always rendered, opacity-toggled for smooth perf */}
+      <button
+        type="button"
+        aria-label="Close sidebar backdrop"
+        aria-hidden={!sidebarOpen}
+        tabIndex={sidebarOpen ? 0 : -1}
+        onClick={() => closeSidebar()}
+        className={cn(
+          "fixed inset-0 z-[125] bg-black/45 transition-opacity duration-200 ease-out",
+          sidebarOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        )}
+      />
 
+      {/* Drawer — always rendered, transform-toggled */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[130] flex w-[280px] flex-col border-r border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out dark:border-slate-800 dark:bg-slate-950 ${
+        aria-hidden={!sidebarOpen}
+        className={cn(
+          "fixed inset-y-0 left-0 z-[130] flex w-[280px] flex-col",
+          "border-r border-slate-200 bg-white shadow-xl",
+          "transition-transform ease-out",
+          "dark:border-slate-800 dark:bg-slate-950",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        )}
+        style={{ willChange: "transform", transitionDuration: "220ms" }}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 dark:border-slate-800">
           <p className="max-w-[220px] truncate text-sm text-slate-600 dark:text-slate-300">{userEmail || "No active session"}</p>

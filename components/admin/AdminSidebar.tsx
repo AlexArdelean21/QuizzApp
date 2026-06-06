@@ -383,20 +383,28 @@ export function AdminLayoutShell({
         </button>
       </div>
 
-      {/* Mobile drawer */}
-      {drawerOpen && (
-        <button
-          type="button"
-          aria-label="Închide meniul"
-          onClick={() => setDrawerOpen(false)}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
-        />
-      )}
-      <aside
+      {/* Mobile drawer backdrop — always rendered, opacity-toggled for smooth perf */}
+      <button
+        type="button"
+        aria-label="Închide meniul"
+        aria-hidden={!drawerOpen}
+        tabIndex={drawerOpen ? 0 : -1}
+        onClick={() => setDrawerOpen(false)}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-gradient-to-b from-blue-700 via-blue-600 to-blue-700 text-white shadow-2xl transition-transform duration-300 ease-out lg:hidden",
+          "fixed inset-0 z-40 bg-black/45 transition-opacity duration-200 ease-out lg:hidden",
+          drawerOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        )}
+      />
+      {/* Mobile drawer — always rendered, transform-toggled */}
+      <aside
+        aria-hidden={!drawerOpen}
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-gradient-to-b from-blue-700 via-blue-600 to-blue-700 text-white shadow-xl transition-transform ease-out lg:hidden",
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         )}
+        style={{ willChange: "transform", transitionDuration: "220ms" }}
       >
         <div className="flex items-center justify-between pr-3">
           {renderHeader("drawer")}
