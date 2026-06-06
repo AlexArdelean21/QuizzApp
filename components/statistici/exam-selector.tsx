@@ -8,9 +8,10 @@ type Props = {
   exams: ExamSummary[]
   selectedId: number
   onChange: (id: number) => void
+  className?: string
 }
 
-export function ExamSelector({ exams, selectedId, onChange }: Props) {
+export function ExamSelector({ exams, selectedId, onChange, className }: Props) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -37,7 +38,7 @@ export function ExamSelector({ exams, selectedId, onChange }: Props) {
   }
 
   return (
-    <div ref={containerRef} className="relative z-[120] w-full sm:w-72">
+    <div ref={containerRef} className={`relative z-[120] w-full sm:w-72 ${className ?? ""}`}>
       <button
         type="button"
         aria-haspopup="listbox"
@@ -52,7 +53,7 @@ export function ExamSelector({ exams, selectedId, onChange }: Props) {
       {open && (
         <div
           role="listbox"
-          className="absolute right-0 z-[120] mt-2 w-full overflow-hidden rounded-xl border border-border/60 bg-popover/95 shadow-2xl backdrop-blur-md"
+          className="absolute right-0 z-[120] mt-2 w-full overflow-y-auto max-h-[220px] rounded-xl border border-border/60 bg-popover/95 shadow-2xl backdrop-blur-md scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent exam-dropdown-scroll"
         >
           {exams.map((exam) => {
             const isActive = exam.id === selectedId

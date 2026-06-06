@@ -498,3 +498,35 @@ body {
     transition: none !important;
   }
 }
+
+/* Thin scrollbar for exam selector dropdown */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 999px;
+}
+
+/* Thin styled scrollbar for exam selector dropdown */
+.exam-dropdown-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.exam-dropdown-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.exam-dropdown-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.exam-dropdown-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 999px;
+}

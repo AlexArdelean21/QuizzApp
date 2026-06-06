@@ -21,6 +21,7 @@ import { AnswerOptions } from "./answer-options"
 import { QuizNavigation } from "./quiz-navigation"
 import { QuizResults } from "./quiz-results"
 import { MistakeReview, type MistakeEntry } from "./mistake-review"
+import { ExamSelector } from "@/components/statistici/exam-selector"
 
 const FALLBACK_DURATION_SEC = 30 * 60
 const FALLBACK_QUESTION_COUNT = 25
@@ -60,7 +61,6 @@ export function QuizInterface() {
   const [mode, setMode] = useState<QuizMode>("simulation")
   const [practiceSource, setPracticeSource] = useState<PracticeSource>("all")
   const [isPracticeSourceOpen, setIsPracticeSourceOpen] = useState(false)
-  const [isExamDropdownOpen, setIsExamDropdownOpen] = useState(false)
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null)
   const [examOptions, setExamOptions] = useState<ExamOption[]>([])
   const [availablePracticeCount, setAvailablePracticeCount] = useState(0)
@@ -113,7 +113,6 @@ export function QuizInterface() {
   // when the timer / finalize swept up any leftovers.
   const recordedSimulationRef = useRef<Set<string>>(new Set())
   const practiceSourceDropdownRef = useRef<HTMLDivElement | null>(null)
-  const examDropdownRef = useRef<HTMLDivElement | null>(null)
 
   questionsRef.current = questions
   answersRef.current = answers
@@ -531,7 +530,6 @@ export function QuizInterface() {
 
   const handleExamChange = useCallback((examId: number) => {
     setSelectedExamId(examId)
-    setIsExamDropdownOpen(false)
   }, [])
 
   const resetToSetup = () => {
@@ -584,21 +582,6 @@ export function QuizInterface() {
     return () => document.removeEventListener("mousedown", handleOutsideClick)
   }, [isPracticeSourceOpen])
 
-  useEffect(() => {
-    if (!isExamDropdownOpen) return
-
-    const handleOutsideClick = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (!examDropdownRef.current?.contains(target)) {
-        setIsExamDropdownOpen(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handleOutsideClick)
-    return () => document.removeEventListener("mousedown", handleOutsideClick)
-  }, [isExamDropdownOpen])
-
   if (status === "loading") return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Se încarcă întrebările…</div>
 
   if (status === "error") {
@@ -640,9 +623,7 @@ export function QuizInterface() {
     const dynamicMax = Math.max(0, Math.min(MAX_PRACTICE_QUESTIONS, availablePracticeCount))
     const sliderMax = Math.max(1, dynamicMax)
     const sliderValue = Math.max(1, Math.min(questionCount, sliderMax))
-    const hasSingleExamOption = examOptions.length === 1
     const noExamAccess = examOptions.length === 0
-    const selectedExamName = selectedExam?.name ?? null
     return (
       <div className="min-h-screen bg-background">
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
@@ -658,48 +639,14 @@ export function QuizInterface() {
                   <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
                     Nu ai acces la niciun examen momentan. Contactează administratorul.
                   </p>
-                ) : hasSingleExamOption ? (
-                  <p className="mt-2 rounded-lg border border-border/70 bg-card/60 px-3 py-2 text-sm text-muted-foreground">
-                    Examen selectat: {selectedExamName ?? examOptions[0]?.name ?? "Examen indisponibil"}
-                  </p>
                 ) : (
-                  <div className="relative mt-2" ref={examDropdownRef}>
-                    <button
-                      id="exam-id"
-                      type="button"
-                      aria-haspopup="listbox"
-                      aria-expanded={isExamDropdownOpen}
-                      onClick={() => setIsExamDropdownOpen((prev) => !prev)}
-                      className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:hover:border-slate-700"
-                    >
-                      <span>{selectedExamName ?? "Selectează examen"}</span>
-                      <ChevronDown
-                        className={`size-4 text-slate-500 transition-transform dark:text-slate-400 ${isExamDropdownOpen ? "rotate-180" : ""}`}
-                      />
-                    </button>
-
-                    {isExamDropdownOpen && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="exam-id"
-                        className="absolute z-[70] mt-1 w-full min-w-[14rem] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900"
-                      >
-                        {examOptions.map((exam) => (
-                          <button
-                            key={exam.id}
-                            type="button"
-                            onClick={() => handleExamChange(exam.id)}
-                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                              selectedExamId === exam.id
-                                ? "bg-blue-50 text-blue-700 dark:bg-slate-800 dark:text-blue-300"
-                                : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                            }`}
-                          >
-                            {exam.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                  <div className="mt-2">
+    <ExamSelector
+      exams={examOptions}
+      selectedId={selectedExamId ?? examOptions[0]?.id ?? 0}
+      onChange={handleExamChange}
+      className="!w-full sm:!w-full"
+    />
                   </div>
                 )}
               </div>
