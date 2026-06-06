@@ -308,6 +308,73 @@ function detectCorrectAnswers(row: ExcelJS.Row, variantCount: number): string[] 
   return labels
 }
 
+function parseExamJson(jsonString: string): ParseExamResult {
+  let raw: unknown
+  try {
+    raw = JSON.parse(jsonString)
+  } catch {
+    throw new Error("JSON invalid. Verifică formatul fișierului.")
+  }
+
+  const asRecord = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null
+  if (!asRecord || !Array.isArray(asRecord.questions)) {
+    throw new Error('JSON-ul trebuie să conțină un câmp "questions" de tip array.')
+  }
+
+  const questions: ParsedExamQuestion[] = []
+  let skippedRows = 0
+
+  for (const item of asRecord.questions as unknown[]) {
+    if (!item || typeof item !== "object") {
+      skippedRows++
+      continue
+    }
+    const q = item as Record<string, unknown>
+
+    const intrebare_text = typeof q.question === "string" ? q.question.replace(/\s+/g, " ").trim() : ""
+    if (!intrebare_text) {
+      skippedRows++
+      continue
+    }
+
+    const variante = Array.isArray(q.answers)
+      ? (q.answers as unknown[]).map((a) => String(a ?? "").replace(/\s+/g, " ").trim())
+      : []
+
+    if (
+      variante.length < MIN_QUIZ_VARIANTS ||
+      variante.length > MAX_QUIZ_VARIANTS ||
+      variante.some((v) => !v)
+    ) {
+      skippedRows++
+      continue
+    }
+
+    const correctRaw = Array.isArray(q.correct) ? (q.correct as unknown[]) : []
+    const raspunsuri_corecte = correctRaw
+      .map((c) => Number(c))
+      .filter((c) => Number.isFinite(c) && c >= 1 && c <= variante.length)
+      .map((c) => OPTION_IDS[c - 1])
+
+    if (raspunsuri_corecte.length === 0) {
+      skippedRows++
+      continue
+    }
+
+    questions.push({
+      intrebare_text,
+      variante,
+      raspunsuri_corecte,
+      varianta_a: variante[0] ?? "",
+      varianta_b: variante[1] ?? "",
+      varianta_c: variante[2] ?? "",
+      raspuns_corect: raspunsuri_corecte[0],
+    })
+  }
+
+  return { questions, skippedRows }
+}
+
 async function parseExamWorkbook(buffer: Buffer): Promise<ParseExamResult> {
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(buffer as any)
@@ -923,6 +990,158 @@ export async function grantExamAccess(
   }
 
   revalidatePath("/admin")
+}
+
+export async function previewExamImportJson(formData: FormData) {
+  const context = await assertAdminActor()
+  const actorSupabase = await createSupabaseServerClient()
+  const jsonContent = String(formData.get("jsonContent") ?? "").trim()
+  if (!jsonContent) throw new Error("Conținutul JSON lipsește.")
+  const parsed = parseExamJson(jsonContent)
+  const existingExamId = parseOptionalExistingExamId(formData)
+
+  if (existingExamId != null) {
+    await assertImportRoleAndExamScope(actorSupabase, context, existingExamId)
+  }
+
+  const dedupPreview = await buildPreviewRowsWithDedupRpc(
+    actorSupabase,
+    existingExamId,
+    parsed.questions
+  )
+  const previewRows: PreviewRow[] = dedupPreview.rows.map((row) => ({
+    idx: row.idx,
+    intrebare_text: row.intrebare_text,
+    variante: row.variante,
+    raspunsuri_corecte: row.raspunsuri_corecte,
+    duplicate_in_db: row.duplicate_in_db,
+    duplicate_in_batch: row.duplicate_in_batch,
+  }))
+
+  return {
+    questionCount: parsed.questions.length,
+    skippedRows: parsed.skippedRows,
+    rows: previewRows,
+    summary: dedupPreview.summary,
+  }
+}
+
+export async function importExamFromJson(formData: FormData) {
+  const context = await assertAdminActor()
+  const actorSupabase = await createSupabaseServerClient()
+
+  const existingExamenIdRaw = parseOptionalExistingExamId(formData)
+  const hasExistingExamenId = existingExamenIdRaw != null
+  const examName = String(formData.get("examName") ?? "").trim()
+  const explicitOrgId = String(formData.get("orgId") ?? "").trim() || null
+
+  const jsonContent = String(formData.get("jsonContent") ?? "").trim()
+  if (!jsonContent) throw new Error("Conținutul JSON lipsește.")
+  const parsed = parseExamJson(jsonContent)
+
+  if (parsed.questions.length === 0) {
+    throw new Error("Nu am detectat întrebări valide în JSON-ul furnizat.")
+  }
+
+  let examenId: number
+  let createdNewExam = false
+
+  if (hasExistingExamenId) {
+    const inScopeExam = await assertImportRoleAndExamScope(
+      actorSupabase,
+      context,
+      existingExamenIdRaw
+    )
+    if (!inScopeExam) throw new Error("Examenul selectat nu există.")
+    examenId = inScopeExam.id
+  } else {
+    await assertImportRoleAndExamScope(actorSupabase, context, null)
+    if (!examName) throw new Error("Numele examenului este obligatoriu.")
+
+    let targetOrgId: string | null = context.scopedOrgId
+    if (context.isSuperAdmin) targetOrgId = explicitOrgId ?? null
+    if (!targetOrgId && !context.isSuperAdmin) {
+      throw new Error("Contul tău nu este asociat unei organizații.")
+    }
+
+    const { data: createdExam, error: createExamError } = await actorSupabase
+      .from("examene")
+      .insert({ nume_examen: examName, org_id: targetOrgId })
+      .select("id")
+      .single()
+
+    if (createExamError || !createdExam) {
+      throw new Error(createExamError?.message ?? "Nu s-a putut crea examenul.")
+    }
+
+    createdNewExam = true
+    examenId = Number(createdExam.id)
+  }
+
+  let dedupPreview: Awaited<ReturnType<typeof buildPreviewRowsWithDedupRpc>>
+  try {
+    dedupPreview = await buildPreviewRowsWithDedupRpc(actorSupabase, examenId, parsed.questions)
+  } catch (error) {
+    if (createdNewExam) await actorSupabase.from("examene").delete().eq("id", examenId)
+    throw error
+  }
+
+  const firstIndexByHash = new Map<string, number>()
+  const rowsToInsert: Array<{ examen_id: number } & ParsedExamQuestion> = []
+  let skippedDuplicatesBatch = 0
+
+  for (const row of dedupPreview.rows) {
+    const hash = row.content_hash
+    const question = parsed.questions[row.idx]
+    if (!question) continue
+
+    if (!hash) {
+      rowsToInsert.push({ examen_id: examenId, ...question })
+      continue
+    }
+
+    if (firstIndexByHash.has(hash)) {
+      skippedDuplicatesBatch += 1
+      continue
+    }
+
+    firstIndexByHash.set(hash, row.idx)
+    rowsToInsert.push({ examen_id: examenId, ...question })
+  }
+
+  let insertedCount = 0
+
+  if (rowsToInsert.length > 0) {
+    try {
+      const { data, error } = await actorSupabase
+        .from("intrebari")
+        .upsert(rowsToInsert, { onConflict: "content_hash", ignoreDuplicates: true })
+        .select("id")
+
+      if (error) throw new Error(error.message)
+      insertedCount = data?.length ?? 0
+    } catch (error) {
+      if (createdNewExam) await actorSupabase.from("examene").delete().eq("id", examenId)
+      throw error
+    }
+  }
+
+  const skippedDuplicatesDb = Math.max(0, rowsToInsert.length - insertedCount)
+  const duplicateCount = skippedDuplicatesBatch + skippedDuplicatesDb
+
+  revalidatePath("/admin")
+
+  return {
+    examenId,
+    inserted: insertedCount,
+    skipped_duplicates_db: skippedDuplicatesDb,
+    skipped_duplicates_batch: skippedDuplicatesBatch,
+    skipped: duplicateCount,
+    insertedCount,
+    skippedRows: parsed.skippedRows,
+    duplicateCount,
+    createdNewExam,
+  }
 }
 
 export async function previewExamImport(formData: FormData) {

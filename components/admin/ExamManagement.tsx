@@ -6,7 +6,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FileJson,
   FilePlus2,
+  FileSpreadsheet,
   Pencil,
   Plus,
   Search,
@@ -17,7 +19,9 @@ import {
 import {
   deleteExam,
   importExamFromExcel,
+  importExamFromJson,
   previewExamImport,
+  previewExamImportJson,
   updateExam,
   updateExamRules,
   type AdminExamRow,
@@ -80,6 +84,9 @@ export function ExamManagement({
     durata_minute: 30,
   })
 
+  const [uploadMode, setUploadMode] = useState<"excel" | "json">("excel")
+  const [jsonText, setJsonText] = useState("")
+
   const [previewing, startPreviewTransition] = useTransition()
   const [creating, startCreateTransition] = useTransition()
   const [savingUpdate, startSavingUpdateTransition] = useTransition()
@@ -88,13 +95,13 @@ export function ExamManagement({
   const [collapsed, setCollapsed] = useState(false)
 
   const isBusy = previewing || creating || savingUpdate || deleting || savingRules
-  const canPreview = Boolean(file) && !isBusy
+  const canPreview = !isBusy && (uploadMode === "excel" ? Boolean(file) : Boolean(jsonText.trim()))
   const canCreate =
-    Boolean(file) &&
     examName.trim().length > 0 &&
     previewSummary !== null &&
     !isBusy &&
-    (isSuperAdmin ? Boolean(createOrgId) : true)
+    (isSuperAdmin ? Boolean(createOrgId) : true) &&
+    (uploadMode === "excel" ? Boolean(file) : Boolean(jsonText.trim()))
   const canSaveUpdate =
     editTargetExam != null &&
     !isBusy &&
@@ -138,6 +145,7 @@ export function ExamManagement({
     setShowCreateModal(false)
     setExamName("")
     setFile(null)
+    setJsonText("")
     setPreviewRows([])
     setPreviewSummary(null)
     setPreviewSkippedRows(0)
@@ -166,6 +174,60 @@ export function ExamManagement({
           pushToast({
             type: "error",
             message: error instanceof Error ? error.message : "Nu s-a putut genera preview-ul.",
+          })
+        }
+      })()
+    })
+  }
+
+  const handlePreviewJson = () => {
+    if (!jsonText.trim()) return
+    startPreviewTransition(() => {
+      void (async () => {
+        try {
+          const formData = new FormData()
+          formData.set("jsonContent", jsonText.trim())
+          const result = await previewExamImportJson(formData)
+          setPreviewRows(result.rows)
+          setPreviewSummary(result.summary)
+          setPreviewSkippedRows(result.skippedRows)
+          pushToast({
+            type: "success",
+            message: `Preview gata: ${result.summary.total} întrebări procesate.`,
+          })
+        } catch (error) {
+          setPreviewRows([])
+          setPreviewSummary(null)
+          setPreviewSkippedRows(0)
+          pushToast({
+            type: "error",
+            message: error instanceof Error ? error.message : "Nu s-a putut genera preview-ul.",
+          })
+        }
+      })()
+    })
+  }
+
+  const handleCreateExamJson = () => {
+    if (!jsonText.trim() || !examName.trim()) return
+    startCreateTransition(() => {
+      void (async () => {
+        try {
+          const formData = new FormData()
+          formData.set("jsonContent", jsonText.trim())
+          formData.set("examName", examName.trim())
+          if (isSuperAdmin && createOrgId) formData.set("orgId", createOrgId)
+          const result = await importExamFromJson(formData)
+          handleClosePopup()
+          pushToast({
+            type: "success",
+            message: `Importate: ${result.inserted} · Sărite (duplicate): ${result.skipped}`,
+          })
+          router.refresh()
+        } catch (error) {
+          pushToast({
+            type: "error",
+            message: error instanceof Error ? error.message : "Nu s-a putut crea examenul.",
           })
         }
       })()
@@ -572,7 +634,7 @@ export function ExamManagement({
                   Creare examen nou
                 </h3>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Încarcă un Excel cu întrebări; răspunsurile corecte vor fi detectate din celulele evidențiate.
+                  Încarcă un Excel sau JSON cu întrebări și răspunsuri.
                 </p>
               </div>
               <FilePlus2 className="size-5 text-blue-500" />
@@ -609,23 +671,115 @@ export function ExamManagement({
                 </label>
               )}
 
-              <label className="block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Fișier Excel (.xlsx)
-                <input
-                  key={file?.name ?? "empty"}
-                  type="file"
-                  accept=".xlsx"
-                  onChange={(event) => {
-                    const next = event.target.files?.[0] ?? null
-                    setFile(next)
-                    setPreviewRows([])
-                    setPreviewSummary(null)
-                    setPreviewSkippedRows(0)
-                  }}
-                  disabled={isBusy}
-                  className="mt-1 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                />
-              </label>
+              <div>
+                <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadMode("excel")
+                      setPreviewRows([])
+                      setPreviewSummary(null)
+                      setPreviewSkippedRows(0)
+                    }}
+                    disabled={isBusy}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      uploadMode === "excel"
+                        ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white"
+                        : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <FileSpreadsheet className="size-3.5" />
+                    Excel (.xlsx)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadMode("json")
+                      setPreviewRows([])
+                      setPreviewSummary(null)
+                      setPreviewSkippedRows(0)
+                    }}
+                    disabled={isBusy}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      uploadMode === "json"
+                        ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white"
+                        : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <FileJson className="size-3.5" />
+                    JSON
+                  </button>
+                </div>
+
+                {uploadMode === "excel" ? (
+                  <label className="mt-3 block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Fișier Excel (.xlsx)
+                    <input
+                      key={file?.name ?? "empty"}
+                      type="file"
+                      accept=".xlsx"
+                      onChange={(event) => {
+                        const next = event.target.files?.[0] ?? null
+                        setFile(next)
+                        setPreviewRows([])
+                        setPreviewSummary(null)
+                        setPreviewSkippedRows(0)
+                      }}
+                      disabled={isBusy}
+                      className="mt-1 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                    />
+                  </label>
+                ) : (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Conținut JSON
+                      </span>
+                      <label className="cursor-pointer text-xs text-blue-600 hover:underline dark:text-blue-400">
+                        Încarcă fișier .json
+                        <input
+                          type="file"
+                          accept=".json"
+                          className="sr-only"
+                          disabled={isBusy}
+                          onChange={(event) => {
+                            const f = event.target.files?.[0]
+                            if (!f) return
+                            f.text().then((text) => {
+                              setJsonText(text)
+                              setPreviewRows([])
+                              setPreviewSummary(null)
+                              setPreviewSkippedRows(0)
+                            }).catch(() => {})
+                            event.target.value = ""
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <textarea
+                      value={jsonText}
+                      onChange={(event) => {
+                        setJsonText(event.target.value)
+                        setPreviewRows([])
+                        setPreviewSummary(null)
+                        setPreviewSkippedRows(0)
+                      }}
+                      disabled={isBusy}
+                      rows={6}
+                      placeholder={`{\n  "questions": [\n    {\n      "question": "Textul întrebării",\n      "answers": ["Variantă A", "Variantă B", "Variantă C"],\n      "correct": [2]\n    }\n  ]\n}`}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-600"
+                    />
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="font-medium">Format:</span> fiecare întrebare are{" "}
+                      <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">question</code>,{" "}
+                      <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">answers</code>{" "}
+                      (2–10 variante) și{" "}
+                      <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">correct</code>{" "}
+                      (indecși 1-bazați ai răspunsurilor corecte).
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {previewSummary ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
@@ -701,14 +855,14 @@ export function ExamManagement({
               <Button
                 type="button"
                 variant="outline"
-                onClick={handlePreview}
+                onClick={uploadMode === "excel" ? handlePreview : handlePreviewJson}
                 disabled={!canPreview}
               >
                 {previewing ? "Preview..." : "Preview"}
               </Button>
               <Button
                 type="button"
-                onClick={handleCreateExam}
+                onClick={uploadMode === "excel" ? handleCreateExam : handleCreateExamJson}
                 disabled={!canCreate}
                 className="bg-blue-600 text-white hover:bg-blue-500"
               >
