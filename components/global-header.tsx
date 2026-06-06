@@ -117,7 +117,7 @@ export function GlobalHeader() {
     const supabase = getSupabaseBrowserClient()
     closeSidebar()
     await supabase.auth.signOut()
-    window.location.href = "/login"
+    window.location.href = "/"
   }
 
   const toggleTheme = () => {
@@ -128,7 +128,9 @@ export function GlobalHeader() {
     window.dispatchEvent(new CustomEvent("quiz-exit-request"))
   }
 
-  if (isLoginRoute || isAdminRoute) {
+  const isHomepage = pathname === "/" && !userEmail
+
+  if (isLoginRoute || isAdminRoute || isHomepage) {
     return null
   }
 

@@ -178,7 +178,7 @@ export function AdminLayoutShell({
   const handleLogout = async () => {
     const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
-    window.location.href = "/login"
+    window.location.href = "/"
   }
 
   const toggleTheme = () => {

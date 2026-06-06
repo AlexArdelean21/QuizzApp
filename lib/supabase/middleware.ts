@@ -4,6 +4,12 @@ import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth", "/api/webhooks"]
 
+// Routes an unauthenticated visitor is allowed to view. Unlike PUBLIC_PATHS,
+// these still go through the Supabase client so a logged-in user's session is
+// refreshed (the homepage renders the quiz for authenticated users and the
+// marketing page for guests).
+const PUBLIC_UNAUTH_ROUTES = ["/"]
+
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublic = PUBLIC_PATHS.some(
@@ -50,10 +56,16 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/login"
-    url.searchParams.set("next", pathname)
-    return NextResponse.redirect(url)
+    const isPublicRoute = PUBLIC_UNAUTH_ROUTES.some(
+      (route) => pathname === route || pathname.startsWith(`${route}/`)
+    )
+
+    if (!isPublicRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/login"
+      url.searchParams.set("next", pathname)
+      return NextResponse.redirect(url)
+    }
   }
 
   if (pathname === "/login") {

@@ -99,10 +99,11 @@ export function BottomTabBar() {
     closeProfile()
     const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
-    window.location.href = "/login"
+    window.location.href = "/"
   }
 
   const isHidden =
+    (pathname === "/" && !userEmail) ||
     pathname.startsWith("/login") ||
     pathname === "/admin" ||
     pathname.startsWith("/admin/") ||
