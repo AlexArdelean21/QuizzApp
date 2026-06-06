@@ -20,6 +20,7 @@ export function GlobalHeader() {
   const [userEmail, setUserEmail] = useState("")
   const [mounted, setMounted] = useState(false)
   const [theme, setTheme] = useState<Theme>("dark")
+  const [storedExamId, setStoredExamId] = useState<number | null>(null)
   const isLoginRoute = pathname.startsWith("/login")
   const isAdminRoute =
     pathname === "/admin" ||
@@ -105,6 +106,12 @@ export function GlobalHeader() {
   useEffect(() => {
     closeSidebar()
   }, [pathname, closeSidebar])
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("quiz.selectedExamId")
+    const id = stored ? Number(stored) : null
+    if (id && Number.isFinite(id) && id > 0) setStoredExamId(id)
+  }, [])
 
   const handleLogout = async () => {
     const supabase = getSupabaseBrowserClient()
@@ -207,7 +214,7 @@ export function GlobalHeader() {
           <nav className="mt-2 flex flex-col gap-1">
             {!isStatisticsRoute && (
               <Link
-                href="/dashboard/statistici"
+                href={storedExamId ? `/dashboard/statistici?examen=${storedExamId}` : "/dashboard/statistici"}
                 onClick={() => closeSidebar()}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900"
               >

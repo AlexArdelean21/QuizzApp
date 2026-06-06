@@ -24,6 +24,23 @@ export function StatisticsHeader({ exams, selectedExam }: Props) {
     window.localStorage.setItem(SELECTED_EXAM_STORAGE_KEY, String(selectedExam.id))
   }, [selectedExam.id])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (params.has("examen")) return
+    const stored = window.localStorage.getItem(SELECTED_EXAM_STORAGE_KEY)
+    const storedId = stored ? Number(stored) : null
+    if (
+      storedId &&
+      Number.isFinite(storedId) &&
+      storedId !== selectedExam.id &&
+      exams.some((e) => e.id === storedId)
+    ) {
+      router.replace(`/dashboard/statistici?examen=${storedId}`)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleExamChange = (nextId: number) => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(SELECTED_EXAM_STORAGE_KEY, String(nextId))

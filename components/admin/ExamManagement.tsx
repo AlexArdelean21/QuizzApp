@@ -86,13 +86,14 @@ export function ExamManagement({
 
   const [uploadMode, setUploadMode] = useState<"excel" | "json">("excel")
   const [jsonText, setJsonText] = useState("")
+  const [showFormatGuide, setShowFormatGuide] = useState(false)
 
   const [previewing, startPreviewTransition] = useTransition()
   const [creating, startCreateTransition] = useTransition()
   const [savingUpdate, startSavingUpdateTransition] = useTransition()
   const [deleting, startDeleteTransition] = useTransition()
   const [savingRules, startSavingRulesTransition] = useTransition()
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
 
   const isBusy = previewing || creating || savingUpdate || deleting || savingRules
   const canPreview = !isBusy && (uploadMode === "excel" ? Boolean(file) : Boolean(jsonText.trim()))
@@ -149,6 +150,7 @@ export function ExamManagement({
     setPreviewRows([])
     setPreviewSummary(null)
     setPreviewSkippedRows(0)
+    setShowFormatGuide(false)
   }
 
   const handlePreview = () => {
@@ -633,9 +635,36 @@ export function ExamManagement({
                 <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                   Creare examen nou
                 </h3>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Încarcă un Excel sau JSON cu întrebări și răspunsuri.
-                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {uploadMode === "excel"
+                      ? "Încarcă un fișier Excel (.xlsx) cu întrebări și răspunsuri."
+                      : "Lipește sau încarcă un fișier JSON cu întrebările examenului."}
+                  </p>
+                  {uploadMode === "excel" && (
+                    <button
+                      type="button"
+                      onClick={() => setShowFormatGuide((prev) => !prev)}
+                      className="flex size-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-400 transition hover:border-blue-400 hover:text-blue-500 dark:border-slate-600 dark:hover:border-blue-500"
+                      aria-label="Format fișier"
+                    >
+                      ?
+                    </button>
+                  )}
+                </div>
+
+                {uploadMode === "excel" && showFormatGuide && (
+                  <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
+                    <p className="font-semibold mb-1">Structura fișierului Excel:</p>
+                    <ul className="space-y-1 list-none">
+                      <li>• <strong>Coloana A</strong> — textul întrebării</li>
+                      <li>• <strong>Coloanele B, C, D...</strong> — variantele de răspuns</li>
+                      <li>• <strong>Răspunsuri corecte</strong> — celulele corecte trebuie evidențiate cu fundal <strong>galben</strong></li>
+                      <li>• Un rând = o întrebare. Rândurile fără text în col. A sunt ignorate.</li>
+                      <li>• Suportă 2–10 variante per întrebare.</li>
+                    </ul>
+                  </div>
+                )}
               </div>
               <FilePlus2 className="size-5 text-blue-500" />
             </div>
@@ -680,6 +709,7 @@ export function ExamManagement({
                       setPreviewRows([])
                       setPreviewSummary(null)
                       setPreviewSkippedRows(0)
+                      setShowFormatGuide(false)
                     }}
                     disabled={isBusy}
                     className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -698,6 +728,7 @@ export function ExamManagement({
                       setPreviewRows([])
                       setPreviewSummary(null)
                       setPreviewSkippedRows(0)
+                      setShowFormatGuide(false)
                     }}
                     disabled={isBusy}
                     className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${

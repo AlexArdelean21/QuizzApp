@@ -269,22 +269,35 @@ export function UsersTable({
                           Acces Admin
                         </span>
                       ) : (activeAccessByUser[profile.id] ?? []).length > 0 ? (
-                        <div className="flex max-w-[180px] flex-col gap-1">
-                          {(activeAccessByUser[profile.id] ?? []).slice(0, 3).map((examName) => (
-                            <span
-                              key={`${profile.id}-${examName}`}
-                              title={examName}
-                              className="block truncate rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
-                            >
-                              {examName}
-                            </span>
-                          ))}
-                          {(activeAccessByUser[profile.id] ?? []).length > 3 && (
-                            <span className="pl-1 text-[11px] text-slate-400 dark:text-slate-500">
-                              +{(activeAccessByUser[profile.id] ?? []).length - 3} mai multe
-                            </span>
-                          )}
-                        </div>
+                        (() => {
+                          const userAccess = activeAccessByUser[profile.id] ?? []
+                          const hasAll = examene.length > 0 && userAccess.length >= examene.length
+                          if (hasAll) {
+                            return (
+                              <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                Toate ({examene.length})
+                              </span>
+                            )
+                          }
+                          return (
+                            <div className="flex max-w-[180px] flex-col gap-1">
+                              {userAccess.slice(0, 3).map((examName) => (
+                                <span
+                                  key={`${profile.id}-${examName}`}
+                                  title={examName}
+                                  className="block truncate rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                                >
+                                  {examName}
+                                </span>
+                              ))}
+                              {userAccess.length > 3 && (
+                                <span className="pl-1 text-[11px] text-slate-400 dark:text-slate-500">
+                                  +{userAccess.length - 3} mai multe
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()
                       ) : (
                         <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                           Fără acces

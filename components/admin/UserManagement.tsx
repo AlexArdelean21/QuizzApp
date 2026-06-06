@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { ChevronDown, Search } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { UsersTable } from "@/components/admin/UsersTable"
 import type {
   AdminExamRow,
@@ -28,8 +28,10 @@ export function UserManagement({
   currentUserId,
   scopedOrgId,
 }: UserManagementProps) {
+  const PAGE_SIZE = 10
   const [searchTerm, setSearchTerm] = useState("")
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
+  const [page, setPage] = useState(1)
 
   const filteredProfiles = useMemo(() => {
     const needle = searchTerm.trim().toLowerCase()
@@ -39,6 +41,14 @@ export function UserManagement({
       return haystack.includes(needle)
     })
   }, [profiles, searchTerm])
+
+  useEffect(() => { setPage(1) }, [searchTerm])
+
+  const pageCount = Math.max(1, Math.ceil(filteredProfiles.length / PAGE_SIZE))
+  const pagedProfiles = filteredProfiles.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE
+  )
 
   return (
     <section
@@ -80,7 +90,7 @@ export function UserManagement({
           </div>
 
           <UsersTable
-            profiles={filteredProfiles}
+            profiles={pagedProfiles}
             examene={examene}
             organizations={organizations}
             activeAccessByUser={activeAccessByUser}
@@ -88,6 +98,30 @@ export function UserManagement({
             currentUserId={currentUserId}
             orgFilter={scopedOrgId}
           />
+
+          {pageCount > 1 && (
+            <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <p>Pagina {page} din {pageCount} · {filteredProfiles.length} utilizatori</p>
+              <div className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  disabled={page >= pageCount}
+                  className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </section>
