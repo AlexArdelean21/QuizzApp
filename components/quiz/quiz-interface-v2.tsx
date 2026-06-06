@@ -625,7 +625,7 @@ export function QuizInterface() {
     const sliderValue = Math.max(1, Math.min(questionCount, sliderMax))
     const noExamAccess = examOptions.length === 0
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background bg-mesh noise-overlay">
         <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-20">
           <div className="card-surface w-full quiz-question-animate">
             <div className="px-6 pt-6 pb-2 md:px-8 md:pt-8">
