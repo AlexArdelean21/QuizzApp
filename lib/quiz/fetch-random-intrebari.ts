@@ -20,6 +20,14 @@ function shuffleInPlace<T>(items: T[]): void {
   }
 }
 
+function shuffleOptions(options: QuizOption[]): QuizOption[] {
+  const shuffled = [...options]
+  shuffleInPlace(shuffled)
+  // Reassign display labels (A, B, C…) to match new visual positions.
+  // The id values stay unchanged so correctAnswers lookups are unaffected.
+  return shuffled.map((opt, i) => ({ ...opt, label: OPTION_LABELS[i] }))
+}
+
 function coerceVariantArray(value: unknown): string[] | null {
   if (value == null) return null
   let candidate: unknown = value
@@ -105,7 +113,7 @@ export function mapIntrebareRowToQuestion(row: IntrebareRow): QuizQuestion | nul
     examenId,
     text: String(row.intrebare_text ?? "").trim(),
     correctAnswers,
-    options,
+    options: shuffleOptions(options),
   }
 }
 
