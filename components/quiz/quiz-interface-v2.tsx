@@ -348,16 +348,18 @@ export function QuizInterface() {
     }
   }, [supabase])
 
+  // The countdown only applies to exam simulations. Practice mode is untimed,
+  // so we never tick down or auto-finalize on timeout.
   useEffect(() => {
-    if (status !== "quiz") return
+    if (status !== "quiz" || isPracticeMode) return
     const id = window.setInterval(() => setTimeRemaining((prev) => (prev <= 0 ? 0 : prev - 1)), 1000)
     return () => window.clearInterval(id)
-  }, [status])
+  }, [status, isPracticeMode])
 
   useEffect(() => {
-    if (status !== "quiz" || timeRemaining > 0) return
+    if (status !== "quiz" || isPracticeMode || timeRemaining > 0) return
     finalizeQuiz({ timedOut: true })
-  }, [status, timeRemaining, finalizeQuiz])
+  }, [status, isPracticeMode, timeRemaining, finalizeQuiz])
 
   const currentQuestion = questions[currentIndex]
   const totalQuestions = questions.length
