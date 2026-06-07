@@ -17,8 +17,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://quizhub.ro"),
   title: "QuizHub",
   description: "QuizHub - platforma modernă pentru simulări și practică examene.",
+  appleWebApp: {
+    capable: true,
+    title: "QuizHub",
+    statusBarStyle: "black-translucent",
+  },
+  openGraph: {
+    title: "QuizHub",
+    description: "QuizHub - platforma modernă pentru simulări și practică examene.",
+    siteName: "QuizHub",
+    locale: "ro_RO",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
