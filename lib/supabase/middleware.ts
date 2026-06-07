@@ -8,7 +8,7 @@ const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth", "/api/webhooks"]
 // these still go through the Supabase client so a logged-in user's session is
 // refreshed (the homepage renders the quiz for authenticated users and the
 // marketing page for guests).
-const PUBLIC_UNAUTH_ROUTES = ["/"]
+const PUBLIC_UNAUTH_ROUTES = ["/", "/docs"]
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname

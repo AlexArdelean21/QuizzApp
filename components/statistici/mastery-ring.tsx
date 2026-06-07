@@ -51,7 +51,7 @@ export function MasteryRing({ masteryPct, distinctCorrectCount, totalQuestions, 
           Nivel de pregătire
         </p>
         <p className="text-sm text-muted-foreground">
-          Procent din pool-ul examenului pentru care ai răspuns corect.
+          Procentul întrebărilor din pool la care ultimul tău răspuns a fost corect.
         </p>
       </div>
 
@@ -106,7 +106,7 @@ export function MasteryRing({ masteryPct, distinctCorrectCount, totalQuestions, 
       </div>
 
       <div className="flex w-full max-w-sm items-center justify-center gap-2 rounded-xl bg-secondary/40 px-4 py-3 text-sm">
-        <span className="text-muted-foreground">Corecte cel puțin o dată</span>
+        <span className="text-muted-foreground">Corecte la ultimul răspuns</span>
         <span className="font-semibold text-foreground tabular-nums">
           {distinctCorrectCount}
           <span className="ml-1 text-xs font-medium text-muted-foreground">/ {totalQuestions}</span>

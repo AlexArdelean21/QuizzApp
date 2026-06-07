@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
+  AlignLeft,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -53,6 +54,60 @@ type PreviewSummary = {
 
 const PAGE_SIZE = 10
 
+function parsePlainTextToQuestions(text: string): {
+  questions: Array<{
+    question: string
+    answers: string[]
+    correct: number[]
+  }>
+} {
+  const questions: Array<{ question: string; answers: string[]; correct: number[] }> = []
+
+  // Split by numbered question patterns: "1.", "1)", "Q1.", etc.
+  const blocks = text
+    .split(/\n(?=\s*\d+[\.\)]|\s*[Qq]\d+[\.\)])/)
+    .map((b) => b.trim())
+    .filter(Boolean)
+
+  for (const block of blocks) {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean)
+    if (!lines.length) continue
+
+    // First line is the question (remove leading number)
+    const questionLine = lines[0].replace(/^\s*\d+[\.\)]\s*/, "").trim()
+    if (!questionLine) continue
+
+    const answers: string[] = []
+    const correct: number[] = []
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i]
+      // Match: a) text *, a) text ✓, * a) text, etc.
+      const match =
+        line.match(/^[a-zA-Z\*\-]\s*[\.\)]\s*(.+)/) ??
+        line.match(/^[\-\*\•]\s+(.+)/)
+      if (!match) continue
+
+      let answerText = match[1].trim()
+      const isCorrect = /[\*✓✔]/.test(answerText) || /[\*✓✔]/.test(line.slice(0, 3))
+
+      // Remove the correct marker from the answer text
+      answerText = answerText.replace(/\s*[\*✓✔]\s*$/, "").trim()
+
+      answers.push(answerText)
+      if (isCorrect) {
+        correct.push(answers.length) // 1-based index
+      }
+    }
+
+    if (answers.length >= 2 && correct.length >= 1) {
+      questions.push({ question: questionLine, answers, correct })
+    }
+  }
+
+  return { questions }
+}
+
 export function ExamManagement({
   examene,
   organizations,
@@ -84,9 +139,12 @@ export function ExamManagement({
     durata_minute: 30,
   })
 
-  const [uploadMode, setUploadMode] = useState<"excel" | "json">("excel")
+  const [uploadMode, setUploadMode] = useState<"excel" | "json" | "text">("excel")
   const [jsonText, setJsonText] = useState("")
+  const [plainText, setPlainText] = useState("")
   const [showFormatGuide, setShowFormatGuide] = useState(false)
+  const [showJsonGuide, setShowJsonGuide] = useState(false)
+  const [showTextGuide, setShowTextGuide] = useState(false)
 
   const [previewing, startPreviewTransition] = useTransition()
   const [creating, startCreateTransition] = useTransition()
@@ -96,13 +154,23 @@ export function ExamManagement({
   const [collapsed, setCollapsed] = useState(true)
 
   const isBusy = previewing || creating || savingUpdate || deleting || savingRules
-  const canPreview = !isBusy && (uploadMode === "excel" ? Boolean(file) : Boolean(jsonText.trim()))
+  const canPreview =
+    !isBusy &&
+    (uploadMode === "excel"
+      ? Boolean(file)
+      : uploadMode === "json"
+        ? Boolean(jsonText.trim())
+        : Boolean(plainText.trim()))
   const canCreate =
     examName.trim().length > 0 &&
     previewSummary !== null &&
     !isBusy &&
     (isSuperAdmin ? Boolean(createOrgId) : true) &&
-    (uploadMode === "excel" ? Boolean(file) : Boolean(jsonText.trim()))
+    (uploadMode === "excel"
+      ? Boolean(file)
+      : uploadMode === "json"
+        ? Boolean(jsonText.trim())
+        : Boolean(plainText.trim()))
   const canSaveUpdate =
     editTargetExam != null &&
     !isBusy &&
@@ -147,10 +215,13 @@ export function ExamManagement({
     setExamName("")
     setFile(null)
     setJsonText("")
+    setPlainText("")
     setPreviewRows([])
     setPreviewSummary(null)
     setPreviewSkippedRows(0)
     setShowFormatGuide(false)
+    setShowJsonGuide(false)
+    setShowTextGuide(false)
   }
 
   const handlePreview = () => {
@@ -217,6 +288,76 @@ export function ExamManagement({
         try {
           const formData = new FormData()
           formData.set("jsonContent", jsonText.trim())
+          formData.set("examName", examName.trim())
+          if (isSuperAdmin && createOrgId) formData.set("orgId", createOrgId)
+          const result = await importExamFromJson(formData)
+          handleClosePopup()
+          pushToast({
+            type: "success",
+            message: `Importate: ${result.inserted} · Sărite (duplicate): ${result.skipped}`,
+          })
+          router.refresh()
+        } catch (error) {
+          pushToast({
+            type: "error",
+            message: error instanceof Error ? error.message : "Nu s-a putut crea examenul.",
+          })
+        }
+      })()
+    })
+  }
+
+  const handlePreviewText = () => {
+    if (!plainText.trim()) return
+    const parsed = parsePlainTextToQuestions(plainText)
+    if (!parsed.questions.length) {
+      pushToast({
+        type: "error",
+        message: "Nu am găsit întrebări valide în text. Verifică formatul.",
+      })
+      return
+    }
+    startPreviewTransition(() => {
+      void (async () => {
+        try {
+          const formData = new FormData()
+          formData.set("jsonContent", JSON.stringify(parsed))
+          const result = await previewExamImportJson(formData)
+          setPreviewRows(result.rows)
+          setPreviewSummary(result.summary)
+          setPreviewSkippedRows(result.skippedRows)
+          pushToast({
+            type: "success",
+            message: `Preview gata: ${result.summary.total} întrebări procesate.`,
+          })
+        } catch (error) {
+          setPreviewRows([])
+          setPreviewSummary(null)
+          setPreviewSkippedRows(0)
+          pushToast({
+            type: "error",
+            message: error instanceof Error ? error.message : "Nu s-a putut genera preview-ul.",
+          })
+        }
+      })()
+    })
+  }
+
+  const handleCreateExamText = () => {
+    if (!plainText.trim() || !examName.trim()) return
+    const parsed = parsePlainTextToQuestions(plainText)
+    if (!parsed.questions.length) {
+      pushToast({
+        type: "error",
+        message: "Nu am găsit întrebări valide în text. Verifică formatul.",
+      })
+      return
+    }
+    startCreateTransition(() => {
+      void (async () => {
+        try {
+          const formData = new FormData()
+          formData.set("jsonContent", JSON.stringify(parsed))
           formData.set("examName", examName.trim())
           if (isSuperAdmin && createOrgId) formData.set("orgId", createOrgId)
           const result = await importExamFromJson(formData)
@@ -629,7 +770,7 @@ export function ExamManagement({
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={handleClosePopup}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
               <div>
                 <h3 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -639,12 +780,18 @@ export function ExamManagement({
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {uploadMode === "excel"
                       ? "Încarcă un fișier Excel (.xlsx) cu întrebări și răspunsuri."
-                      : "Lipește sau încarcă un fișier JSON cu întrebările examenului."}
+                      : uploadMode === "json"
+                        ? "Lipește sau încarcă un fișier JSON cu întrebările examenului."
+                        : "Lipește întrebările ca text simplu, numerotate, cu variante a), b), c)..."}
                   </p>
-                  {uploadMode === "excel" && (
+                  {(uploadMode === "excel" || uploadMode === "json" || uploadMode === "text") && (
                     <button
                       type="button"
-                      onClick={() => setShowFormatGuide((prev) => !prev)}
+                      onClick={() => {
+                        if (uploadMode === "excel") setShowFormatGuide((prev) => !prev)
+                        else if (uploadMode === "json") setShowJsonGuide((prev) => !prev)
+                        else setShowTextGuide((prev) => !prev)
+                      }}
                       className="flex size-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-400 transition hover:border-blue-400 hover:text-blue-500 dark:border-slate-600 dark:hover:border-blue-500"
                       aria-label="Format fișier"
                     >
@@ -654,7 +801,7 @@ export function ExamManagement({
                 </div>
 
                 {uploadMode === "excel" && showFormatGuide && (
-                  <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
                     <p className="font-semibold mb-1">Structura fișierului Excel:</p>
                     <ul className="space-y-1 list-none">
                       <li>• <strong>Coloana A</strong> — textul întrebării</li>
@@ -663,6 +810,58 @@ export function ExamManagement({
                       <li>• Un rând = o întrebare. Rândurile fără text în col. A sunt ignorate.</li>
                       <li>• Suportă 2–10 variante per întrebare.</li>
                     </ul>
+                    <a
+                      href="/docs#import-excel"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Află mai mult →
+                    </a>
+                  </div>
+                )}
+
+                {uploadMode === "json" && showJsonGuide && (
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
+                    <p className="font-semibold mb-2">Format JSON:</p>
+                    <pre className="rounded bg-white/60 p-2 font-mono text-[10px] leading-relaxed dark:bg-black/20 overflow-x-auto">{`{
+  "questions": [
+    {
+      "question": "Textul întrebării",
+      "answers": ["Variantă A", "Variantă B", "Variantă C"],
+      "correct": [1]
+    }
+  ]
+}`}</pre>
+                    <ul className="mt-2 space-y-1">
+                      <li>• <strong>question</strong> — textul întrebării</li>
+                      <li>• <strong>answers</strong> — 2–10 variante de răspuns</li>
+                      <li>• <strong>correct</strong> — indecși 1-bazați ai răspunsurilor corecte (ex: [1] pentru primul)</li>
+                      <li>• Suportă răspunsuri multiple: <code className="rounded bg-white/60 px-1 dark:bg-black/20">"correct": [1, 3]</code></li>
+                    </ul>
+                    <a
+                      href="/docs#import-json"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Află mai mult →
+                    </a>
+                  </div>
+                )}
+
+                {uploadMode === "text" && showTextGuide && (
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
+                    <p className="font-semibold mb-1">Format text simplu:</p>
+                    <ul className="space-y-1">
+                      <li>• Fiecare întrebare începe cu număr: <code className="rounded bg-white/60 px-1 dark:bg-black/20">1.</code> sau <code className="rounded bg-white/60 px-1 dark:bg-black/20">1)</code></li>
+                      <li>• Variantele cu <code className="rounded bg-white/60 px-1 dark:bg-black/20">a)</code> sau <code className="rounded bg-white/60 px-1 dark:bg-black/20">a.</code></li>
+                      <li>• Marchează corect cu <code className="rounded bg-white/60 px-1 dark:bg-black/20">*</code> sau <code className="rounded bg-white/60 px-1 dark:bg-black/20">✓</code> la finalul variantei</li>
+                    </ul>
+                    <a href="/docs#import-text" target="_blank" rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
+                      Află mai mult →
+                    </a>
                   </div>
                 )}
               </div>
@@ -710,6 +909,8 @@ export function ExamManagement({
                       setPreviewSummary(null)
                       setPreviewSkippedRows(0)
                       setShowFormatGuide(false)
+                      setShowJsonGuide(false)
+                      setShowTextGuide(false)
                     }}
                     disabled={isBusy}
                     className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -729,6 +930,8 @@ export function ExamManagement({
                       setPreviewSummary(null)
                       setPreviewSkippedRows(0)
                       setShowFormatGuide(false)
+                      setShowJsonGuide(false)
+                      setShowTextGuide(false)
                     }}
                     disabled={isBusy}
                     className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -739,6 +942,27 @@ export function ExamManagement({
                   >
                     <FileJson className="size-3.5" />
                     JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadMode("text")
+                      setPreviewRows([])
+                      setPreviewSummary(null)
+                      setPreviewSkippedRows(0)
+                      setShowFormatGuide(false)
+                      setShowJsonGuide(false)
+                      setShowTextGuide(false)
+                    }}
+                    disabled={isBusy}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      uploadMode === "text"
+                        ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white"
+                        : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <AlignLeft className="size-3.5" />
+                    Text
                   </button>
                 </div>
 
@@ -760,7 +984,7 @@ export function ExamManagement({
                       className="mt-1 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
                     />
                   </label>
-                ) : (
+                ) : uploadMode === "json" ? (
                   <div className="mt-3 flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -809,7 +1033,36 @@ export function ExamManagement({
                       (indecși 1-bazați ai răspunsurilor corecte).
                     </p>
                   </div>
-                )}
+                ) : uploadMode === "text" ? (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Text întrebări
+                      </span>
+                    </div>
+                    <textarea
+                      value={plainText}
+                      onChange={(event) => {
+                        setPlainText(event.target.value)
+                        setPreviewRows([])
+                        setPreviewSummary(null)
+                        setPreviewSkippedRows(0)
+                      }}
+                      disabled={isBusy}
+                      rows={8}
+                      placeholder={`1. Care este tensiunea nominală?
+a) 220V *
+b) 110V
+c) 380V
+
+2. Curentul alternativ are frecvența de:
+a) 50 Hz *
+b) 60 Hz
+c) 100 Hz`}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-600"
+                    />
+                  </div>
+                ) : null}
               </div>
 
               {previewSummary ? (
@@ -886,14 +1139,26 @@ export function ExamManagement({
               <Button
                 type="button"
                 variant="outline"
-                onClick={uploadMode === "excel" ? handlePreview : handlePreviewJson}
+                onClick={
+                  uploadMode === "excel"
+                    ? handlePreview
+                    : uploadMode === "json"
+                      ? handlePreviewJson
+                      : handlePreviewText
+                }
                 disabled={!canPreview}
               >
                 {previewing ? "Preview..." : "Preview"}
               </Button>
               <Button
                 type="button"
-                onClick={uploadMode === "excel" ? handleCreateExam : handleCreateExamJson}
+                onClick={
+                  uploadMode === "excel"
+                    ? handleCreateExam
+                    : uploadMode === "json"
+                      ? handleCreateExamJson
+                      : handleCreateExamText
+                }
                 disabled={!canCreate}
                 className="bg-blue-600 text-white hover:bg-blue-500"
               >
@@ -977,7 +1242,7 @@ export function ExamManagement({
               }
             }}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950 max-h-[90vh] overflow-y-auto">
             <h4 className="text-lg font-semibold text-slate-900 dark:text-white">
               Update examen
             </h4>

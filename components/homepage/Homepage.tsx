@@ -158,6 +158,8 @@ export function Homepage({ stats }: { stats: PublicStats }) {
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <Link href="/login" className="transition hover:text-foreground">Login</Link>
             <span>·</span>
+            <Link href="/docs" className="transition hover:text-foreground">Documentație</Link>
+            <span>·</span>
             <a href="mailto:contact@quizhub.ro" className="transition hover:text-foreground">Contact</a>
           </div>
         </div>

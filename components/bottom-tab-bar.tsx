@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { BarChart3, Home, LogOut, Moon, Shield, Sun, User } from "lucide-react"
+import { BarChart3, BookOpen, Home, LogOut, Moon, Shield, Sun, User } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { isAdminRole } from "@/lib/auth/roles"
@@ -150,6 +150,14 @@ export function BottomTabBar() {
                 {mounted && theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
                 {theme === "dark" ? "Light mode" : "Dark mode"}
               </button>
+              <Link
+                href="/docs"
+                onClick={closeProfile}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-foreground transition hover:bg-muted"
+              >
+                <BookOpen className="size-[18px]" />
+                Documentație
+              </Link>
               <button
                 type="button"
                 onClick={handleLogout}
