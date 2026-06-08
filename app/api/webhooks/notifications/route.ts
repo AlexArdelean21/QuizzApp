@@ -148,7 +148,7 @@ async function handleExamAccess(
   }
   const safeFormattedDate = escapeHtml(formattedDate)
 
-  const ctaUrl = `${appUrl}/quiz`
+  const ctaUrl = `${appUrl}/`
 
   const html = layoutEmail(`
       <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Salut, ${userName}!</h2>
@@ -286,7 +286,7 @@ async function handleRolePromotion(
   const userEmail = escapeHtml(userEmailRaw)
   const orgName = escapeHtml(orgNameRaw)
 
-  const ctaUrl = `${appUrl}/dashboard/admin`
+  const ctaUrl = `${appUrl}/admin`
 
   const html = layoutEmail(`
       <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Salut, ${userName}!</h2>
