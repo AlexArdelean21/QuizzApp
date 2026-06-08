@@ -59,6 +59,8 @@ export function UsersTable({
   const [selectedExamByUser, setSelectedExamByUser] = useState<Record<string, number>>({})
   const [daysByUser, setDaysByUser] = useState<Record<string, number>>({})
   const [selectedOrg, setSelectedOrg] = useState<string>("")
+  const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; email: string | null; nume: string | null } | null>(null)
+  const [deleteUserConfirmInput, setDeleteUserConfirmInput] = useState("")
 
   const defaultExamId = examene[0]?.id ?? null
   const orgNameById = new Map<string, string>(
@@ -110,17 +112,21 @@ export function UsersTable({
     })
   }
 
-  const handleDeleteUser = (userId: string, userEmail: string | null) => {
-    const confirmed = window.confirm(
-      `Sigur vrei să ștergi utilizatorul ${userEmail ?? userId}?`
-    )
-    if (!confirmed) return
+  const handleDeleteUserClick = (userId: string, userEmail: string | null, userName: string | null) => {
+    if (isPending) return
+    setDeleteUserTarget({ id: userId, email: userEmail, nume: userName })
+    setDeleteUserConfirmInput("")
+  }
 
-    setPendingAction({ type: "delete", userId })
+  const handleDeleteUserConfirm = () => {
+    if (!deleteUserTarget) return
+    setPendingAction({ type: "delete", userId: deleteUserTarget.id })
     startTransition(() => {
       void (async () => {
         try {
-          await deleteUser(userId)
+          await deleteUser(deleteUserTarget.id)
+          setDeleteUserTarget(null)
+          setDeleteUserConfirmInput("")
         } catch (error) {
           console.error("Failed to delete user:", error)
           window.alert(error instanceof Error ? error.message : "Nu s-a putut șterge utilizatorul.")
@@ -359,7 +365,7 @@ export function UsersTable({
                         )}
                         <button
                           type="button"
-                          onClick={() => handleDeleteUser(profile.id, profile.email)}
+                          onClick={() => handleDeleteUserClick(profile.id, profile.email, profile.nume)}
                           disabled={isPending || !canDelete}
                           title={
                             isOrgAdminPeer
@@ -382,6 +388,66 @@ export function UsersTable({
           </tbody>
         </table>
       </div>
+
+      {deleteUserTarget ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            aria-label="Închide confirmarea"
+            onClick={() => {
+              if (!isPending) {
+                setDeleteUserTarget(null)
+                setDeleteUserConfirmInput("")
+              }
+            }}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-rose-500/40 bg-white p-5 shadow-2xl dark:bg-slate-950">
+            <h4 className="text-lg font-semibold text-rose-600 dark:text-rose-300">
+              Confirmă ștergerea utilizatorului
+            </h4>
+            <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+              Această acțiune este permanentă și va șterge contul, progresul și toate datele asociate utilizatorului.
+            </p>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+              Pentru confirmare, tastați exact adresa de email:{" "}
+              <span className="font-semibold text-slate-900 dark:text-white">
+                {deleteUserTarget.email ?? deleteUserTarget.id}
+              </span>
+            </p>
+            <input
+              value={deleteUserConfirmInput}
+              onChange={(event) => setDeleteUserConfirmInput(event.target.value)}
+              placeholder="Adresa de email"
+              className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              disabled={isPending}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteUserTarget(null)
+                  setDeleteUserConfirmInput("")
+                }}
+                disabled={isPending}
+                className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                Anulează
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteUserConfirm}
+                disabled={deleteUserConfirmInput.trim() !== (deleteUserTarget.email ?? deleteUserTarget.id) || isPending}
+                className="inline-flex items-center justify-center rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                {isPending && pendingAction?.type === "delete" && pendingAction.userId === deleteUserTarget.id
+                  ? "Se șterge..."
+                  : "Șterge definitiv"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

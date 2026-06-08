@@ -128,6 +128,10 @@ export function ExamManagement({
   const [editTargetExam, setEditTargetExam] = useState<AdminExamRow | null>(null)
   const [editExamName, setEditExamName] = useState("")
   const [editFile, setEditFile] = useState<File | null>(null)
+  const [editUploadMode, setEditUploadMode] = useState<"excel" | "json" | "text">("excel")
+  const [editJsonText, setEditJsonText] = useState("")
+  const [editPlainText, setEditPlainText] = useState("")
+  const [editShowFormatGuide, setEditShowFormatGuide] = useState(false)
   const [deleteTargetExam, setDeleteTargetExam] = useState<AdminExamRow | null>(null)
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("")
   const [questionEditorExam, setQuestionEditorExam] = useState<AdminExamRow | null>(null)
@@ -172,9 +176,13 @@ export function ExamManagement({
         ? Boolean(jsonText.trim())
         : Boolean(plainText.trim()))
   const canSaveUpdate =
-    editTargetExam != null &&
-    !isBusy &&
-    (editExamName.trim().length > 0 || editFile != null)
+    editExamName.trim().length > 0 &&
+    !savingUpdate &&
+    (
+      editUploadMode === "excel" ? true :
+      editUploadMode === "json" ? editJsonText.trim().length > 0 :
+      editPlainText.trim().length > 0
+    )
   const canDeleteForever =
     deleteTargetExam != null &&
     deleteConfirmationInput.trim() === deleteTargetExam.nume_examen &&
@@ -453,22 +461,54 @@ export function ExamManagement({
       void (async () => {
         try {
           const formData = new FormData()
-          formData.set("examId", String(editTargetExam.id))
-          formData.set("examName", editExamName.trim())
-          if (editFile) {
-            formData.set("file", editFile)
+          if (editUploadMode === "excel") {
+            formData.set("examId", String(editTargetExam.id))
+            formData.set("examName", editExamName.trim())
+            if (editFile) {
+              formData.set("file", editFile)
+            }
+            const result = await updateExam(formData)
+            pushToast({
+              type: "success",
+              message:
+                `Examen actualizat. +${result.insertedCount} întrebări noi, ` +
+                `${result.duplicateCount} duplicate ignorate.` +
+                (result.skippedRows > 0 ? ` ${result.skippedRows} rânduri invalide ignorate.` : ""),
+            })
+          } else if (editUploadMode === "json") {
+            formData.set("jsonContent", editJsonText.trim())
+            formData.set("examName", editExamName.trim())
+            formData.set("existingExamenId", String(editTargetExam.id))
+            const result = await importExamFromJson(formData)
+            pushToast({
+              type: "success",
+              message: `Actualizat. +${result.inserted} întrebări noi, ${result.skipped} duplicate ignorate.`,
+            })
+          } else {
+            const parsed = parsePlainTextToQuestions(editPlainText.trim())
+            if (!parsed.questions.length) {
+              pushToast({
+                type: "error",
+                message: "Nu am găsit întrebări valide în text. Verifică formatul.",
+              })
+              return
+            }
+            formData.set("jsonContent", JSON.stringify(parsed))
+            formData.set("examName", editExamName.trim())
+            formData.set("existingExamenId", String(editTargetExam.id))
+            const result = await importExamFromJson(formData)
+            pushToast({
+              type: "success",
+              message: `Actualizat. +${result.inserted} întrebări noi, ${result.skipped} duplicate ignorate.`,
+            })
           }
-          const result = await updateExam(formData)
-          pushToast({
-            type: "success",
-            message:
-              `Examen actualizat. +${result.insertedCount} întrebări noi, ` +
-              `${result.duplicateCount} duplicate ignorate.` +
-              (result.skippedRows > 0 ? ` ${result.skippedRows} rânduri invalide ignorate.` : ""),
-          })
           setEditTargetExam(null)
           setEditExamName("")
           setEditFile(null)
+          setEditUploadMode("excel")
+          setEditJsonText("")
+          setEditPlainText("")
+          setEditShowFormatGuide(false)
           router.refresh()
         } catch (error) {
           console.error("Update exam import failed:", error)
@@ -1239,6 +1279,10 @@ c) 100 Hz`}
                 setEditTargetExam(null)
                 setEditExamName("")
                 setEditFile(null)
+                setEditUploadMode("excel")
+                setEditJsonText("")
+                setEditPlainText("")
+                setEditShowFormatGuide(false)
               }
             }}
           />
@@ -1247,7 +1291,7 @@ c) 100 Hz`}
               Update examen
             </h4>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Poți modifica numele examenului și/sau încărca un Excel pentru întrebări noi.
+              Poți modifica numele examenului și/sau adăuga întrebări noi.
             </p>
 
             <label className="mt-4 block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1260,16 +1304,188 @@ c) 100 Hz`}
               disabled={savingUpdate}
             />
 
-            <label className="mt-4 block text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Fișier Excel (.xlsx) - opțional
-            </label>
-            <input
-              type="file"
-              accept=".xlsx"
-              onChange={(event) => setEditFile(event.target.files?.[0] ?? null)}
-              className="mt-1 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              disabled={savingUpdate}
-            />
+            {/* Tab switcher */}
+            <div className="mt-4 bg-slate-100 rounded-lg p-1 flex gap-1">
+              <button
+                type="button"
+                onClick={() => { setEditUploadMode("excel"); setEditShowFormatGuide(false) }}
+                disabled={savingUpdate}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  editUploadMode === "excel"
+                    ? "bg-white border border-slate-200 shadow-sm font-medium text-slate-900 dark:bg-slate-800 dark:text-white"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                <FileSpreadsheet className="size-3.5" />
+                Excel (.xlsx)
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditUploadMode("json"); setEditShowFormatGuide(false) }}
+                disabled={savingUpdate}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  editUploadMode === "json"
+                    ? "bg-white border border-slate-200 shadow-sm font-medium text-slate-900 dark:bg-slate-800 dark:text-white"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                <FileJson className="size-3.5" />
+                JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditUploadMode("text"); setEditShowFormatGuide(false) }}
+                disabled={savingUpdate}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  editUploadMode === "text"
+                    ? "bg-white border border-slate-200 shadow-sm font-medium text-slate-900 dark:bg-slate-800 dark:text-white"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                <AlignLeft className="size-3.5" />
+                Text
+              </button>
+            </div>
+
+            {/* Tab content */}
+            {editUploadMode === "excel" ? (
+              <div className="mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Fișier Excel (.xlsx) – Opțional
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditShowFormatGuide((prev) => !prev)}
+                    className="flex size-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-400 transition hover:border-blue-400 hover:text-blue-500 dark:border-slate-600 dark:hover:border-blue-500"
+                    aria-label="Format fișier"
+                  >
+                    ?
+                  </button>
+                </div>
+                {editShowFormatGuide && (
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
+                    <p className="font-semibold mb-1">Structura fișierului Excel:</p>
+                    <ul className="space-y-1 list-none">
+                      <li>• <strong>Coloana A</strong> — textul întrebării</li>
+                      <li>• <strong>Coloanele B, C, D...</strong> — variantele de răspuns</li>
+                      <li>• <strong>Răspunsuri corecte</strong> — celulele corecte trebuie evidențiate cu fundal <strong>galben</strong></li>
+                      <li>• Un rând = o întrebare. Rândurile fără text în col. A sunt ignorate.</li>
+                      <li>• Suportă 2–10 variante per întrebare.</li>
+                    </ul>
+                    <a
+                      href="/docs#import-excel"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Află mai mult →
+                    </a>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(event) => setEditFile(event.target.files?.[0] ?? null)}
+                  className="mt-2 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  disabled={savingUpdate}
+                />
+              </div>
+            ) : editUploadMode === "json" ? (
+              <div className="mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Conținut JSON
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditShowFormatGuide((prev) => !prev)}
+                    className="flex size-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-400 transition hover:border-blue-400 hover:text-blue-500 dark:border-slate-600 dark:hover:border-blue-500"
+                    aria-label="Format JSON"
+                  >
+                    ?
+                  </button>
+                </div>
+                {editShowFormatGuide && (
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
+                    <p className="font-semibold mb-2">Format JSON:</p>
+                    <pre className="rounded bg-white/60 p-2 font-mono text-[10px] leading-relaxed dark:bg-black/20 overflow-x-auto">{`{
+  "questions": [
+    {
+      "question": "Textul întrebării",
+      "answers": ["Variantă A", "Variantă B", "Variantă C"],
+      "correct": [1]
+    }
+  ]
+}`}</pre>
+                    <ul className="mt-2 space-y-1">
+                      <li>• <strong>question</strong> — textul întrebării</li>
+                      <li>• <strong>answers</strong> — 2–10 variante de răspuns</li>
+                      <li>• <strong>correct</strong> — indecși 1-bazați ai răspunsurilor corecte (ex: [1] pentru primul)</li>
+                      <li>• Suportă răspunsuri multiple: <code className="rounded bg-white/60 px-1 dark:bg-black/20">&quot;correct&quot;: [1, 3]</code></li>
+                    </ul>
+                    <a
+                      href="/docs#import-json"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Află mai mult →
+                    </a>
+                  </div>
+                )}
+                <textarea
+                  value={editJsonText}
+                  onChange={(event) => setEditJsonText(event.target.value)}
+                  disabled={savingUpdate}
+                  rows={8}
+                  placeholder="Lipește conținutul JSON aici..."
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-600"
+                />
+              </div>
+            ) : (
+              <div className="mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Text Simplu
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditShowFormatGuide((prev) => !prev)}
+                    className="flex size-5 shrink-0 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-400 transition hover:border-blue-400 hover:text-blue-500 dark:border-slate-600 dark:hover:border-blue-500"
+                    aria-label="Format text"
+                  >
+                    ?
+                  </button>
+                </div>
+                {editShowFormatGuide && (
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800/40 dark:bg-blue-500/10 dark:text-blue-300">
+                    <p className="font-semibold mb-1">Format text simplu:</p>
+                    <ul className="space-y-1">
+                      <li>• Fiecare întrebare începe cu număr: <code className="rounded bg-white/60 px-1 dark:bg-black/20">1.</code> sau <code className="rounded bg-white/60 px-1 dark:bg-black/20">1)</code></li>
+                      <li>• Variantele cu <code className="rounded bg-white/60 px-1 dark:bg-black/20">a)</code> sau <code className="rounded bg-white/60 px-1 dark:bg-black/20">a.</code></li>
+                      <li>• Marchează corect cu <code className="rounded bg-white/60 px-1 dark:bg-black/20">*</code> sau <code className="rounded bg-white/60 px-1 dark:bg-black/20">✓</code> la finalul variantei</li>
+                    </ul>
+                    <a
+                      href="/docs#import-text"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Află mai mult →
+                    </a>
+                  </div>
+                )}
+                <textarea
+                  value={editPlainText}
+                  onChange={(event) => setEditPlainText(event.target.value)}
+                  disabled={savingUpdate}
+                  rows={8}
+                  placeholder="Lipește textul cu întrebările aici..."
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-600"
+                />
+              </div>
+            )}
 
             <div className="mt-5 flex justify-end gap-2">
               <Button
@@ -1279,6 +1495,10 @@ c) 100 Hz`}
                   setEditTargetExam(null)
                   setEditExamName("")
                   setEditFile(null)
+                  setEditUploadMode("excel")
+                  setEditJsonText("")
+                  setEditPlainText("")
+                  setEditShowFormatGuide(false)
                 }}
                 disabled={savingUpdate}
               >
