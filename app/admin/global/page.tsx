@@ -59,7 +59,7 @@ export default async function GlobalAdminPage() {
   const [orgsResult, profilesResult, examsResult] = await Promise.all([
     adminSupabase
       .from("organizatii")
-      .select("id, nume, slug, created_at")
+      .select("id, nume, slug, created_at, invite_links_enabled")
       .order("nume", { ascending: true }),
     adminSupabase
       .from("profiles")
@@ -85,6 +85,7 @@ export default async function GlobalAdminPage() {
     nume: String(row.nume ?? ""),
     slug: String(row.slug ?? ""),
     created_at: row.created_at ? String(row.created_at) : null,
+    invite_links_enabled: Boolean(row.invite_links_enabled),
   }))
 
   const users: AdminUserRow[] = (profilesResult.data ?? []).map((row) => {

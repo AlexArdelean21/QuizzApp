@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
+import { consumeInviteToken } from "@/lib/auth/invite-token"
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
   const next = requestUrl.searchParams.get("next") ?? "/"
+  const invite = requestUrl.searchParams.get("invite")
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -49,6 +51,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       new URL("/login?error=auth-code-error", requestUrl.origin)
     )
+  }
+
+  if (invite && typeof invite === "string") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    console.log("[auth/callback] invite flow started", {
+      hasUser: Boolean(user?.id),
+      tokenLength: invite.length,
+    })
+    if (user?.id) {
+      const result = await consumeInviteToken(invite, user.id)
+      if (!result.ok) {
+        console.error("[auth/callback] consumeInviteToken failed", { reason: result.reason })
+      } else {
+        console.log("[auth/callback] consumeInviteToken success", {
+          org_id: result.org_id,
+          already_in_org: result.already_in_org,
+        })
+      }
+    } else {
+      console.error("[auth/callback] no user after exchangeCodeForSession")
+    }
+    // Carry over the session cookies that exchangeCodeForSession set on
+    // `response` so the user stays authenticated after the redirect.
+    const inviteResponse = NextResponse.redirect(new URL("/", requestUrl.origin))
+    response.cookies.getAll().forEach((cookie) => {
+      inviteResponse.cookies.set(cookie)
+    })
+    return inviteResponse
   }
 
   return response

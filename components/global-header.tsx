@@ -23,6 +23,7 @@ export function GlobalHeader() {
   const [theme, setTheme] = useState<Theme>("dark")
   const [storedExamId, setStoredExamId] = useState<number | null>(null)
   const isLoginRoute = pathname.startsWith("/login")
+  const isJoinRoute = pathname.startsWith("/join")
   const isAdminRoute =
     pathname === "/admin" ||
     pathname.startsWith("/admin/") ||
@@ -132,7 +133,7 @@ export function GlobalHeader() {
   const isHomepage = pathname === "/" && !userEmail
   const isDocsRoute = pathname === "/docs" || pathname.startsWith("/docs/")
 
-  if (isLoginRoute || isAdminRoute || isHomepage || isDocsRoute) {
+  if (isLoginRoute || isAdminRoute || isHomepage || isDocsRoute || isJoinRoute) {
     return null
   }
 

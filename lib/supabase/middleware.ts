@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth", "/api/webhooks"]
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth", "/api/webhooks", "/join", "/docs"]
 
 // Routes an unauthenticated visitor is allowed to view. Unlike PUBLIC_PATHS,
 // these still go through the Supabase client so a logged-in user's session is

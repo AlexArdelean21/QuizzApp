@@ -1,5 +1,6 @@
 "use server"
 
+import { randomBytes } from "crypto"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@supabase/supabase-js"
 import ExcelJS from "exceljs"
@@ -200,6 +201,7 @@ export type AdminOrganizationRow = {
   nume: string
   slug: string
   created_at: string | null
+  invite_links_enabled?: boolean
 }
 
 export type AdminUserRow = {
@@ -1630,4 +1632,146 @@ export async function updateUserRole(input: { userId: string; role: AppRole }) {
   revalidatePath("/admin/global")
   revalidatePath("/admin")
   return { userId, role }
+}
+
+export async function generateInviteToken(orgId: string): Promise<{
+  token: string
+  expires_at: string
+  invite_url: string
+}> {
+  const context = await assertAdminActor()
+  // super_admin may generate for any org; org_admin only for their own org.
+  if (!context.isSuperAdmin && context.scopedOrgId !== orgId) {
+    throw new Error("Nu ai dreptul să generezi linkuri pentru această organizație.")
+  }
+  const actorSupabase = await createSupabaseServerClient()
+
+  // Verify invite_links_enabled for this org
+  const { data: org, error: orgError } = await actorSupabase
+    .from("organizatii")
+    .select("id, invite_links_enabled")
+    .eq("id", orgId)
+    .maybeSingle()
+
+  if (orgError || !org) throw new Error("Organizația nu a fost găsită.")
+  if (!org.invite_links_enabled) {
+    throw new Error("Invite links nu sunt activate pentru această organizație.")
+  }
+
+  // Generate cryptographically random token (32 bytes → 64 hex chars)
+  const token = randomBytes(32).toString("hex")
+  const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { error: insertError } = await actorSupabase
+    .from("invite_tokens")
+    .insert({
+      org_id: orgId,
+      created_by: context.userId,
+      token,
+      expires_at: expiresAt,
+    })
+
+  if (insertError) throw new Error(insertError.message)
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://quizhub.ro"
+  return {
+    token,
+    expires_at: expiresAt,
+    invite_url: `${appUrl}/join?token=${token}`,
+  }
+}
+
+export type InviteTokenRow = {
+  id: string
+  token: string
+  expires_at: string
+  used_at: string | null
+  used_by_email: string | null
+  created_at: string
+  status: "active" | "expired" | "used"
+}
+
+export async function getInviteTokens(orgId: string): Promise<InviteTokenRow[]> {
+  const context = await assertAdminActor()
+  // super_admin may read any org; org_admin only their own. Silent empty
+  // result for out-of-scope requests instead of throwing.
+  if (!context.isSuperAdmin && context.scopedOrgId !== orgId) return []
+  const actorSupabase = await createSupabaseServerClient()
+
+  const { data, error } = await actorSupabase
+    .from("invite_tokens")
+    .select("id, token, expires_at, used_at, used_by, created_at")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false })
+
+  if (error) throw new Error(error.message)
+
+  const now = new Date()
+  return (data ?? []).map((row) => {
+    let status: "active" | "expired" | "used"
+    if (row.used_at) status = "used"
+    else if (new Date(row.expires_at) < now) status = "expired"
+    else status = "active"
+
+    return {
+      id: String(row.id),
+      token: String(row.token),
+      expires_at: String(row.expires_at),
+      used_at: row.used_at ? String(row.used_at) : null,
+      used_by_email: null, // enriched client-side if needed
+      created_at: String(row.created_at),
+      status,
+    }
+  })
+}
+
+export async function revokeInviteToken(tokenId: string): Promise<void> {
+  const context = await assertAdminActor()
+  const actorSupabase = await createSupabaseServerClient()
+
+  // First, fetch the token to verify org scope
+  const { data: tokenRow, error: fetchError } = await actorSupabase
+    .from("invite_tokens")
+    .select("id, org_id")
+    .eq("id", tokenId)
+    .maybeSingle()
+
+  if (fetchError) throw new Error(fetchError.message)
+  if (!tokenRow) throw new Error("Tokenul nu a fost găsit.")
+
+  const tokenOrgId = String(tokenRow.org_id)
+
+  // Authorization:
+  //   - super_admin can revoke any token
+  //   - org_admin can revoke only tokens in their own org
+  if (!context.isSuperAdmin) {
+    if (!context.scopedOrgId || context.scopedOrgId !== tokenOrgId) {
+      throw new Error("Nu ai dreptul să revoci acest link.")
+    }
+  }
+
+  // Revoke = set expires_at to the past. RLS already enforces org scoping
+  // on UPDATE; the explicit check above is defense in depth.
+  const { error: updateError } = await actorSupabase
+    .from("invite_tokens")
+    .update({ expires_at: new Date(0).toISOString() })
+    .eq("id", tokenId)
+
+  if (updateError) throw new Error(updateError.message)
+}
+
+export async function toggleOrgInviteLinks(
+  orgId: string,
+  enabled: boolean
+): Promise<void> {
+  const context = await assertAdminActor()
+  if (!context.isSuperAdmin) {
+    throw new Error("Doar super admin poate modifica această setare.")
+  }
+  const actorSupabase = await createSupabaseServerClient()
+  const { error } = await actorSupabase
+    .from("organizatii")
+    .update({ invite_links_enabled: enabled })
+    .eq("id", orgId)
+  if (error) throw new Error(error.message)
 }

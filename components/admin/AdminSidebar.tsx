@@ -10,6 +10,7 @@ import {
   ChevronsRight,
   Home,
   LayoutDashboard,
+  Link2,
   LogOut,
   Menu,
   Moon,
@@ -198,6 +199,12 @@ export function AdminLayoutShell({
       label: "Statistici utilizatori",
       icon: BarChart3,
       show: role === "super_admin" || role === "org_admin",
+    },
+    {
+      href: "/dashboard/admin/invite",
+      label: "Invite Links",
+      icon: Link2,
+      show: !isSuperAdmin,
     },
     {
       href: "/admin/global",

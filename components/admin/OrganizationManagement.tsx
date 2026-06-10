@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { Fragment, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Building2, Inbox, Pencil, Plus, Search, Trash2, Users as UsersIcon } from "lucide-react"
+import { Building2, Inbox, Link2, Pencil, Plus, Search, Trash2, Users as UsersIcon } from "lucide-react"
 import {
   assignUserToOrganization,
   createOrganization,
@@ -13,6 +13,7 @@ import {
   type AdminUserRow,
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
+import { InviteManagement } from "@/components/admin/InviteManagement"
 import type { AppRole } from "@/lib/auth/roles"
 
 type Toast = { type: "success" | "error"; message: string } | null
@@ -54,6 +55,7 @@ export function OrganizationManagement({
   const [deleteConfirm, setDeleteConfirm] = useState("")
   const [searchUser, setSearchUser] = useState("")
   const [userFilter, setUserFilter] = useState<UserFilter>("lobby")
+  const [expandedOrgInvite, setExpandedOrgInvite] = useState<string | null>(null)
 
   const [creating, startCreate] = useTransition()
   const [saving, startSave] = useTransition()
@@ -232,57 +234,84 @@ export function OrganizationManagement({
               ) : (
                 organizations.map((org) => {
                   const orgStats = stats[org.id] ?? { users: 0, exams: 0 }
+                  const inviteOpen = expandedOrgInvite === org.id
                   return (
-                    <tr
-                      key={org.id}
-                      className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-300">
-                            <Building2 className="size-4" />
+                    <Fragment key={org.id}>
+                      <tr className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                              <Building2 className="size-4" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-900 dark:text-white">{org.nume}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                ID {org.id.slice(0, 8)}…
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-slate-900 dark:text-white">{org.nume}</p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              ID {org.id.slice(0, 8)}…
-                            </p>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{org.slug}</td>
+                        <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{orgStats.users}</td>
+                        <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{orgStats.exams}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={inviteOpen ? "default" : "outline"}
+                              onClick={() =>
+                                setExpandedOrgInvite((current) =>
+                                  current === org.id ? null : org.id
+                                )
+                              }
+                              className={
+                                inviteOpen ? "bg-blue-600 text-white hover:bg-blue-500" : undefined
+                              }
+                            >
+                              <Link2 className="mr-1 size-3.5" />
+                              Invite Links
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditTarget(org)
+                                setEditNume(org.nume)
+                                setEditSlug(org.slug)
+                              }}
+                            >
+                              <Pencil className="mr-1 size-3.5" />
+                              Editează
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => {
+                                setDeleteTarget(org)
+                                setDeleteConfirm("")
+                              }}
+                            >
+                              <Trash2 className="mr-1 size-3.5" />
+                              Șterge
+                            </Button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{org.slug}</td>
-                      <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{orgStats.users}</td>
-                      <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{orgStats.exams}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditTarget(org)
-                              setEditNume(org.nume)
-                              setEditSlug(org.slug)
-                            }}
-                          >
-                            <Pencil className="mr-1 size-3.5" />
-                            Editează
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => {
-                              setDeleteTarget(org)
-                              setDeleteConfirm("")
-                            }}
-                          >
-                            <Trash2 className="mr-1 size-3.5" />
-                            Șterge
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {inviteOpen ? (
+                        <tr className="bg-slate-50/60 dark:bg-slate-950/40">
+                          <td colSpan={5} className="px-4 py-4">
+                            <InviteManagement
+                              orgId={org.id}
+                              inviteLinksEnabled={org.invite_links_enabled ?? false}
+                              isSuperAdmin={true}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   )
                 })
               )}
