@@ -27,6 +27,7 @@ export function BottomTabBar() {
   const [quizActive, setQuizActive] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [bouncedKey, setBouncedKey] = useState<string | null>(null)
+  const [dragDestination, setDragDestination] = useState<string | null>(null)
 
   const handleTabTap = (key: string) => {
     setBouncedKey(key)
@@ -87,6 +88,21 @@ export function BottomTabBar() {
     }
     window.addEventListener("quiz-active-change", handleQuizActive as EventListener)
     return () => window.removeEventListener("quiz-active-change", handleQuizActive as EventListener)
+  }, [])
+
+  useEffect(() => {
+    const onOpenProfile = () => setProfileOpen(true)
+    window.addEventListener("open-profile-sheet", onOpenProfile)
+    return () => window.removeEventListener("open-profile-sheet", onOpenProfile)
+  }, [])
+
+  useEffect(() => {
+    const onDragProgress = (event: Event) => {
+      const ev = event as CustomEvent<{ destinationHref: string | null }>
+      setDragDestination(ev.detail.destinationHref)
+    }
+    window.addEventListener("swipe-drag-progress", onDragProgress as EventListener)
+    return () => window.removeEventListener("swipe-drag-progress", onDragProgress as EventListener)
   }, [])
 
   const closeProfile = () => setProfileOpen(false)
@@ -182,6 +198,13 @@ export function BottomTabBar() {
           const active = isTabActive(tab.key)
 
           if (tab.href) {
+            const isDragPreview =
+              dragDestination !== null &&
+              (
+                tab.href === dragDestination ||
+                (tab.key === "profil" && dragDestination === "__profile__")
+              )
+            const showActive = active || isDragPreview
             return (
               <Link
                 key={tab.key}
@@ -189,18 +212,21 @@ export function BottomTabBar() {
                 onClick={() => handleTabTap(tab.key)}
                 className={cn(
                   "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
-                  active ? "text-primary" : "text-muted-foreground",
+                  showActive ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 <Icon
                   size={22}
-                  strokeWidth={active ? 2.5 : 1.75}
+                  strokeWidth={showActive ? 2.5 : 1.75}
                   className={cn(bouncedKey === tab.key && "tab-bounce")}
                 />
                 <span>{tab.label}</span>
               </Link>
             )
           }
+
+          const isDragPreview = dragDestination === "__profile__"
+          const showActive = active || isDragPreview
 
           return (
             <button
@@ -210,11 +236,14 @@ export function BottomTabBar() {
                 handleTabTap(tab.key)
                 tab.onClick?.()
               }}
-              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium text-muted-foreground transition-colors"
+              className={cn(
+                "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+                showActive ? "text-primary" : "text-muted-foreground",
+              )}
             >
               <Icon
                 size={22}
-                strokeWidth={1.75}
+                strokeWidth={showActive ? 2.5 : 1.75}
                 className={cn(bouncedKey === tab.key && "tab-bounce")}
               />
               <span>{tab.label}</span>

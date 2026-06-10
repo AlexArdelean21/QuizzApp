@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { ReactNode, useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
@@ -21,6 +22,7 @@ import {
 import { cn } from "@/lib/utils"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import type { AppRole } from "@/lib/auth/roles"
+import { SwipeNavigator } from "@/components/swipe-navigator"
 
 type Theme = "light" | "dark"
 
@@ -59,6 +61,12 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const pathname = usePathname()
   const [hash, setHash] = useState("")
   const [bouncedKey, setBouncedKey] = useState<string | null>(null)
+  const [dragDestination, setDragDestination] = useState<string | null>(null)
+  const [barMounted, setBarMounted] = useState(false)
+
+  useEffect(() => {
+    setBarMounted(true)
+  }, [])
 
   const handleTabTap = (key: string) => {
     setBouncedKey(key)
@@ -70,6 +78,15 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     setHash(window.location.hash)
     window.addEventListener("hashchange", onHashChange)
     return () => window.removeEventListener("hashchange", onHashChange)
+  }, [])
+
+  useEffect(() => {
+    const onDragProgress = (event: Event) => {
+      const ev = event as CustomEvent<{ destinationHref: string | null }>
+      setDragDestination(ev.detail.destinationHref)
+    }
+    window.addEventListener("swipe-drag-progress", onDragProgress as EventListener)
+    return () => window.removeEventListener("swipe-drag-progress", onDragProgress as EventListener)
   }, [])
 
   const isActive = (href: string) => {
@@ -88,20 +105,24 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     { href: "/", label: "← Quiz", icon: Home, isBack: true },
   ]
 
-  return (
+  if (!barMounted) return null
+
+  return createPortal(
     <nav className="fixed inset-x-0 bottom-0 z-[130] flex justify-center pb-[env(safe-area-inset-bottom)] md:hidden">
       <div
         className={cn(
-          "mx-3 mb-2 flex w-full items-center justify-around",
-          "rounded-2xl border border-border/50 bg-card/80 px-1 py-1",
-          "shadow-lg backdrop-blur-xl dark:bg-card/70",
-          "max-w-sm"
+          "mx-4 mb-2 flex w-full max-w-md items-center justify-around",
+          "rounded-2xl border border-border/50 bg-card/75 px-2 py-1",
+          "shadow-lg shadow-black/5 ring-1 ring-white/10 backdrop-blur-xl",
+          "dark:bg-card/60 dark:shadow-black/20 dark:ring-white/5"
         )}
         style={{ height: "58px" }}
       >
         {tabs.map((tab) => {
           const Icon = tab.icon
           const active = isActive(tab.href)
+          const isDragPreview = dragDestination !== null && tab.href === dragDestination
+          const showActive = active || isDragPreview
           return (
             <Link
               key={tab.href}
@@ -109,24 +130,26 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               onClick={() => handleTabTap(tab.href)}
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-0.5",
-                "py-1 text-[10px] font-medium transition-colors",
+                "py-2 text-[10px] font-medium transition-colors",
                 tab.isBack
                   ? "text-muted-foreground/70 hover:text-foreground"
-                  : active
+                  : showActive
                     ? "text-primary"
                     : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Icon
-                className={cn("size-5", bouncedKey === tab.href && "tab-bounce")}
-                strokeWidth={active ? 2.5 : 1.75}
+                size={22}
+                strokeWidth={showActive ? 2.5 : 1.75}
+                className={cn(bouncedKey === tab.href && "tab-bounce")}
               />
               <span className="leading-none">{tab.label}</span>
             </Link>
           )
         })}
       </div>
-    </nav>
+    </nav>,
+    document.body
   )
 }
 
@@ -456,7 +479,9 @@ export function AdminLayoutShell({
         {renderFooter("desktop")}
       </aside>
 
-      <main className="min-h-screen pb-20 md:pb-0">{children}</main>
+      <main className="min-h-screen pb-20 md:pb-0">
+        <SwipeNavigator>{children}</SwipeNavigator>
+      </main>
       <AdminBottomTabBar isSuperAdmin={isSuperAdmin} />
     </div>
   )

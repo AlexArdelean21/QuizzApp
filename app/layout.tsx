@@ -4,6 +4,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { GlobalHeader } from "@/components/global-header";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
+import { SwipeNavigator } from "@/components/swipe-navigator";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -51,7 +52,7 @@ export default function RootLayout({
         />
         <SidebarLayout>
           <GlobalHeader />
-          {children}
+          <SwipeNavigator>{children}</SwipeNavigator>
         </SidebarLayout>
         <BottomTabBar />
         <SpeedInsights />
