@@ -4,6 +4,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { normalizeRole } from "@/lib/auth/roles"
 import { StudentsFiltersBar } from "@/components/admin/student-stats/StudentsFiltersBar"
 import { StudentsTableClient } from "@/components/admin/student-stats/StudentsTableClient"
+import { ShareStatsToggle } from "@/components/admin/student-stats/ShareStatsToggle"
+import { getMyShareStatsEnabled } from "@/app/admin/actions"
 import type { ExamOption, OrganizationOption, StudentStatsRow } from "@/lib/student-stats/types"
 
 const PAGE_SIZE = 25
@@ -44,6 +46,11 @@ function TableSkeleton() {
   )
 }
 
+async function ShareStatsToggleSection() {
+  const initial = await getMyShareStatsEnabled()
+  return <ShareStatsToggle initialEnabled={initial} />
+}
+
 async function StudentsTableSection({
   orgId,
   examenId,
@@ -51,6 +58,7 @@ async function StudentsTableSection({
   sort,
   page,
   examPassThresholdPct,
+  includePeerAdmins,
 }: {
   orgId: string
   examenId: number
@@ -58,6 +66,7 @@ async function StudentsTableSection({
   sort: string
   page: number
   examPassThresholdPct: number | null
+  includePeerAdmins: boolean
 }) {
   const supabase = await createSupabaseServerClient()
   const offset = (page - 1) * PAGE_SIZE
@@ -78,6 +87,23 @@ async function StudentsTableSection({
   const rows = (data ?? []) as StudentStatsRow[]
   const totalCount = rows[0]?.total_count ?? 0
 
+  let peerAdmins: StudentStatsRow[] = []
+  if (includePeerAdmins) {
+    const { data: peerData, error: peerError } = await supabase.rpc(
+      "get_peer_admins_stats",
+      {
+        p_examen_id: examenId,
+        p_search: search || null,
+        p_sort: sort || "nume_asc",
+        p_limit: PAGE_SIZE,
+        p_offset: 0,
+      }
+    )
+    if (!peerError && peerData) {
+      peerAdmins = (peerData ?? []) as StudentStatsRow[]
+    }
+  }
+
   const emptyState = search
     ? {
         title: `Niciun utilizator nu corespunde căutării «${search}».`,
@@ -89,6 +115,7 @@ async function StudentsTableSection({
   return (
     <StudentsTableClient
       rows={rows}
+      peerAdmins={peerAdmins}
       totalCount={totalCount}
       page={page}
       pageSize={PAGE_SIZE}
@@ -208,6 +235,12 @@ export default async function AdminStudentsPage({ searchParams }: Props) {
           ) : null}
         </header>
 
+        {role === "org_admin" ? (
+          <Suspense fallback={null}>
+            <ShareStatsToggleSection />
+          </Suspense>
+        ) : null}
+
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-200/70 pb-4 dark:border-slate-800">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -253,6 +286,7 @@ export default async function AdminStudentsPage({ searchParams }: Props) {
                   sort={sort}
                   page={page}
                   examPassThresholdPct={examPassThresholdPct}
+                  includePeerAdmins={role === "org_admin"}
                 />
               </Suspense>
             ) : (

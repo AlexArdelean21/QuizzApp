@@ -84,7 +84,7 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     { href: "/dashboard/admin/elevi", label: "Statistici", icon: BarChart3 },
     ...(isSuperAdmin
       ? [{ href: "/admin/global", label: "Organizații", icon: Building2 }]
-      : []),
+      : [{ href: "/dashboard/admin/invite", label: "Invitații", icon: Link2 }]),
     { href: "/", label: "← Quiz", icon: Home, isBack: true },
   ]
 
@@ -95,7 +95,7 @@ function AdminBottomTabBar({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           "mx-3 mb-2 flex w-full items-center justify-around",
           "rounded-2xl border border-border/50 bg-card/80 px-1 py-1",
           "shadow-lg backdrop-blur-xl dark:bg-card/70",
-          isSuperAdmin ? "max-w-sm" : "max-w-xs"
+          "max-w-sm"
         )}
         style={{ height: "58px" }}
       >
@@ -202,7 +202,7 @@ export function AdminLayoutShell({
     },
     {
       href: "/dashboard/admin/invite",
-      label: "Invite Links",
+      label: "Invitații",
       icon: Link2,
       show: !isSuperAdmin,
     },

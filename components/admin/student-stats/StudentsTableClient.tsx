@@ -20,6 +20,7 @@ type Props = {
   examenId: number | null
   emptyState: { title: string; description?: string }
   examPassThresholdPct: number | null
+  peerAdmins?: StudentStatsRow[]
 }
 
 function formatPercent(value: number | null) {
@@ -51,6 +52,7 @@ export function StudentsTableClient({
   examenId,
   emptyState,
   examPassThresholdPct,
+  peerAdmins,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -201,30 +203,62 @@ export function StudentsTableClient({
   )
 
   return (
-    <DataTable
-      key={currentSearch}
-      rows={rows}
-      columns={columns}
-      totalCount={totalCount}
-      pageSize={pageSize}
-      currentPage={page}
-      currentSort={currentSort}
-      currentSearch={currentSearch}
-      emptyState={emptyState}
-      availableSortKeys={[
-        "nume_asc",
-        "nume_desc",
-        "scor_desc",
-        "scor_asc",
-        "simulari_desc",
-        "timp_desc",
-        "ultima_activitate_desc",
-      ]}
-      buildHref={buildHref}
-      onRowClick={(row) => {
-        if (!examenId) return
-        router.push(`/dashboard/admin/elevi/${row.user_id}?examen_id=${examenId}`)
-      }}
-    />
+    <>
+      {peerAdmins && peerAdmins.length > 0 ? (
+        <div className="rounded-xl border bg-card p-4 mb-4">
+          <div className="mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Colegi admini</h3>
+            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+              {peerAdmins.length}
+            </span>
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Org admini din organizația ta care au activat partajarea statisticilor.
+          </p>
+          <DataTable
+            rows={peerAdmins}
+            columns={columns}
+            totalCount={peerAdmins.length}
+            pageSize={peerAdmins.length || 1}
+            currentPage={1}
+            currentSort={currentSort}
+            currentSearch={currentSearch}
+            emptyState={{ title: "—" }}
+            availableSortKeys={[]}
+            buildHref={() => "#"}
+            onRowClick={(row) => {
+              if (!examenId) return
+              router.push(`/dashboard/admin/elevi/${row.user_id}?examen_id=${examenId}`)
+            }}
+          />
+        </div>
+      ) : null}
+
+      <DataTable
+        key={currentSearch}
+        rows={rows}
+        columns={columns}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        currentPage={page}
+        currentSort={currentSort}
+        currentSearch={currentSearch}
+        emptyState={emptyState}
+        availableSortKeys={[
+          "nume_asc",
+          "nume_desc",
+          "scor_desc",
+          "scor_asc",
+          "simulari_desc",
+          "timp_desc",
+          "ultima_activitate_desc",
+        ]}
+        buildHref={buildHref}
+        onRowClick={(row) => {
+          if (!examenId) return
+          router.push(`/dashboard/admin/elevi/${row.user_id}?examen_id=${examenId}`)
+        }}
+      />
+    </>
   )
 }

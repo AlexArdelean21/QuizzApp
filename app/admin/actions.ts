@@ -1775,3 +1775,20 @@ export async function toggleOrgInviteLinks(
     .eq("id", orgId)
   if (error) throw new Error(error.message)
 }
+
+export async function getMyShareStatsEnabled(): Promise<boolean> {
+  const actorSupabase = await createSupabaseServerClient()
+  const { data, error } = await actorSupabase.rpc("get_my_share_stats")
+  if (error) {
+    console.error("[getMyShareStatsEnabled]", error)
+    return false
+  }
+  return Boolean(data)
+}
+
+export async function setMyShareStatsEnabled(enabled: boolean): Promise<void> {
+  const actorSupabase = await createSupabaseServerClient()
+  const { error } = await actorSupabase.rpc("toggle_share_stats", { enabled })
+  if (error) throw new Error(error.message)
+  revalidatePath("/dashboard/admin/elevi")
+}

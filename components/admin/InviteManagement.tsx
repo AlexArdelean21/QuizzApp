@@ -166,7 +166,7 @@ export function InviteManagement({
         </div>
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-            Invite Links
+            Invitații
           </h3>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             Permite membrilor noi să se alăture organizației printr-un link.

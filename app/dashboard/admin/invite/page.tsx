@@ -63,7 +63,7 @@ export default async function InvitePage() {
             {org?.nume ?? "Organizație"}
           </p>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
-            Invite Links
+            Invitații
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Generează linkuri de invitație pentru a adăuga membri noi direct în organizație.
@@ -78,7 +78,7 @@ export default async function InvitePage() {
             Funcție dezactivată
           </h2>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            Invite links nu sunt activate pentru organizația ta. Contactează
+            Invitații nu sunt activate pentru organizația ta. Contactează
             administratorul platformei pentru a activa această funcție.
           </p>
         </div>

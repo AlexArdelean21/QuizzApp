@@ -26,7 +26,6 @@ import { ExamSelector } from "@/components/statistici/exam-selector"
 const FALLBACK_DURATION_SEC = 30 * 60
 const FALLBACK_QUESTION_COUNT = 25
 const FALLBACK_PASS_THRESHOLD = 18
-const MAX_PRACTICE_QUESTIONS = 100
 const SELECTED_EXAM_STORAGE_KEY = "quiz.selectedExamId"
 
 type QuizMode = "simulation" | "practice"
@@ -300,7 +299,7 @@ export function QuizInterface() {
 
   useEffect(() => {
     if (!isPracticeMode) return
-    const dynamicMax = Math.max(0, Math.min(MAX_PRACTICE_QUESTIONS, availablePracticeCount))
+    const dynamicMax = Math.max(0, availablePracticeCount)
     if (dynamicMax === 0) {
       setQuestionCount(0)
       return
@@ -524,7 +523,7 @@ export function QuizInterface() {
       return
     }
     if (isPracticeMode && availablePracticeCount === 0) return
-    const selectedCount = mode === "simulation" ? examSimulationCount : Math.min(Math.max(1, availablePracticeCount), Math.min(MAX_PRACTICE_QUESTIONS, Math.max(1, questionCount)))
+    const selectedCount = mode === "simulation" ? examSimulationCount : Math.min(Math.max(1, availablePracticeCount), Math.max(1, questionCount))
     void loadQuiz(mode, selectedCount, selectedExamId, practiceSource, userId, examDurationSec)
   }
 
@@ -620,7 +619,7 @@ export function QuizInterface() {
   }
 
   if (status === "setup") {
-    const dynamicMax = Math.max(0, Math.min(MAX_PRACTICE_QUESTIONS, availablePracticeCount))
+    const dynamicMax = Math.max(0, availablePracticeCount)
     const sliderMax = Math.max(1, dynamicMax)
     const sliderValue = Math.max(1, Math.min(questionCount, sliderMax))
     const noExamAccess = examOptions.length === 0
