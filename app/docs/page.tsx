@@ -101,27 +101,29 @@ export default async function DocsPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          {/* Left: back to homepage */}
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            <span className="hidden sm:inline">Acasă</span>
-          </Link>
+          {/* Left: back to home */}
+          <div className="flex flex-1 items-center">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
+            >
+              <ArrowLeft className="size-4" />
+              Acasă
+            </Link>
+          </div>
 
-          {/* Center: title */}
-          <Link href="/docs" className="flex items-center gap-2">
-            <span className="text-lg font-extrabold tracking-tight">
-              <span className="bg-gradient-to-r from-blue-500 via-blue-600 to-cyan-400 bg-clip-text text-transparent">
-                QuizHub
-              </span>
-            </span>
-            <span className="text-sm text-muted-foreground">Documentație</span>
-          </Link>
+          {/* Center: QuizHub wordmark, large + centered */}
+          <div className="flex flex-1 items-center justify-center">
+            <Link
+              href="/docs"
+              className="bg-gradient-to-r from-primary via-sky-400 to-blue-500 bg-clip-text text-2xl font-extrabold leading-none tracking-tight text-transparent"
+            >
+              QuizHub
+            </Link>
+          </div>
 
           {/* Right: theme toggle + login */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center justify-end gap-3">
             <DocsThemeToggle />
             {isLoggedIn ? (
               <Link
