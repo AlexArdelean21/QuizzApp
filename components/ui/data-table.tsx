@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown, Search } from "lucide-react"
@@ -17,6 +17,14 @@ export type Column<TRow> = {
   headerClassName?: string
   cellClassName?: string
   align?: "left" | "right" | "center"
+  /** Pin this column to an edge during horizontal scroll. */
+  pin?: "left" | "right"
+  /** Fixed width (px). Needed for correct sticky offsets when pinning >1 column on a side. */
+  width?: number
+  /** Minimum width (px). Forces the table wide enough to trigger horizontal scroll. */
+  minWidth?: number
+  /** Prevent text wrapping. Defaults to true for pinned columns, false otherwise. */
+  noWrap?: boolean
 }
 
 export type DataTableProps<TRow> = {
@@ -101,6 +109,74 @@ export function DataTable<TRow>({
     return Array.from({ length: maxButtons }, (_, idx) => start + idx)
   }, [currentPage, pageCount])
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const rafRef = useRef<number | null>(null)
+  const [scroll, setScroll] = useState({ atStart: true, atEnd: true })
+
+  const measure = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const atStart = el.scrollLeft <= 0
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+    setScroll((prev) =>
+      prev.atStart === atStart && prev.atEnd === atEnd ? prev : { atStart, atEnd },
+    )
+  }, [])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(el)
+    measure()
+    return () => ro.disconnect()
+  }, [measure])
+
+  useEffect(() => {
+    measure()
+  }, [rows, measure])
+
+  const handleScroll = useCallback(() => {
+    if (rafRef.current != null) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      measure()
+    })
+  }, [measure])
+
+  const DEFAULT_PIN_WIDTH = 200
+  const leftPins = useMemo(() => columns.filter((c) => c.pin === "left"), [columns])
+  const rightPins = useMemo(() => columns.filter((c) => c.pin === "right"), [columns])
+  const lastLeftPinKey = leftPins.at(-1)?.key
+  const firstRightPinKey = rightPins[0]?.key
+
+  const cellStyle = useCallback(
+    (column: Column<TRow>, kind: "head" | "cell"): React.CSSProperties | undefined => {
+      const style: React.CSSProperties = {}
+      if (column.width != null) style.width = column.width
+      if (column.minWidth != null) style.minWidth = column.minWidth
+      if (column.pin === "left") {
+        const i = leftPins.findIndex((c) => c.key === column.key)
+        style.position = "sticky"
+        style.left = leftPins.slice(0, i).reduce((s, c) => s + (c.width ?? DEFAULT_PIN_WIDTH), 0)
+        style.zIndex = kind === "head" ? 30 : 20
+        if (column.key === lastLeftPinKey && !scroll.atStart) {
+          style.boxShadow = "8px 0 12px -8px rgb(0 0 0 / 0.18)"
+        }
+      } else if (column.pin === "right") {
+        const i = rightPins.findIndex((c) => c.key === column.key)
+        style.position = "sticky"
+        style.right = rightPins.slice(i + 1).reduce((s, c) => s + (c.width ?? DEFAULT_PIN_WIDTH), 0)
+        style.zIndex = kind === "head" ? 30 : 20
+        if (column.key === firstRightPinKey && !scroll.atEnd) {
+          style.boxShadow = "-8px 0 12px -8px rgb(0 0 0 / 0.18)"
+        }
+      }
+      return Object.keys(style).length ? style : undefined
+    },
+    [leftPins, rightPins, lastLeftPinKey, firstRightPinKey, scroll.atStart, scroll.atEnd],
+  )
+
   const getNextSort = (columnSortKey?: string): string | undefined => {
     if (!columnSortKey) return undefined
     if (currentSort !== columnSortKey) return columnSortKey
@@ -131,7 +207,11 @@ export function DataTable<TRow>({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="relative overflow-x-auto overscroll-x-contain [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent"
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -147,7 +227,13 @@ export function DataTable<TRow>({
                   <TableHead
                     key={column.key}
                     aria-sort={ariaSort}
-                    className={cn(alignClass(column.align), column.headerClassName)}
+                    className={cn(
+                      alignClass(column.align),
+                      column.headerClassName,
+                      column.pin && "bg-card",
+                      (column.noWrap ?? Boolean(column.pin)) && "whitespace-nowrap",
+                    )}
+                    style={cellStyle(column, "head")}
                   >
                     {isSortable ? (
                       <button
@@ -194,12 +280,18 @@ export function DataTable<TRow>({
                 <TableRow
                   key={rowIndex}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={cn(onRowClick && "cursor-pointer")}
+                  className={cn("group/row", onRowClick && "cursor-pointer")}
                 >
                   {columns.map((column) => (
                     <TableCell
                       key={column.key}
-                      className={cn(alignClass(column.align), column.cellClassName)}
+                      className={cn(
+                        alignClass(column.align),
+                        column.cellClassName,
+                        column.pin && "bg-card group-hover/row:bg-muted transition-[box-shadow,background-color]",
+                        (column.noWrap ?? Boolean(column.pin)) && "whitespace-nowrap",
+                      )}
+                      style={cellStyle(column, "cell")}
                     >
                       {column.render(row)}
                     </TableCell>

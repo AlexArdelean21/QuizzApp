@@ -88,6 +88,9 @@ export function StudentsTableClient({
         header: "Nume",
         sortable: true,
         sortKey: "nume_asc",
+        pin: "left",
+        minWidth: 240,
+        noWrap: false,
         render: (row) => (
           <div>
             <p className="font-medium text-foreground">{row.nume ?? "—"}</p>
@@ -101,6 +104,7 @@ export function StudentsTableClient({
         sortable: true,
         sortKey: "scor_desc",
         align: "right",
+        minWidth: 120,
         render: (row) => <span className="tabular-nums">{formatPercent(row.scor_mediu)}</span>,
       },
       {
@@ -109,12 +113,14 @@ export function StudentsTableClient({
         sortable: true,
         sortKey: "simulari_desc",
         align: "right",
+        minWidth: 160,
         render: (row) => <span className="tabular-nums">{row.simulari_finalizate}</span>,
       },
       {
         key: "rata",
         header: "Rată trecere",
         align: "center",
+        minWidth: 130,
         render: (row) => {
           if (row.rata_trecere_pct == null) {
             return (
@@ -144,6 +150,7 @@ export function StudentsTableClient({
       {
         key: "pregatire",
         header: "Nivel pregătire",
+        minWidth: 170,
         render: (row) => {
           const pct = row.nivel_pregatire_pct
           return (
@@ -177,6 +184,7 @@ export function StudentsTableClient({
           </span>
         ),
         align: "center",
+        minWidth: 160,
         render: (row) => (
           <span className="tabular-nums">
             {row.examene_participate} / {row.examene_acces}
@@ -189,6 +197,7 @@ export function StudentsTableClient({
         sortable: true,
         sortKey: "timp_desc",
         align: "right",
+        minWidth: 140,
         render: (row) => <span className="tabular-nums">{formatDuration(row.timp_dedicat_secunde)}</span>,
       },
       {
@@ -196,6 +205,7 @@ export function StudentsTableClient({
         header: "Ultima activitate",
         sortable: true,
         sortKey: "ultima_activitate_desc",
+        minWidth: 180,
         render: (row) => <span className="text-sm text-muted-foreground">{relativeTime(row.ultima_activitate)}</span>,
       },
     ],
