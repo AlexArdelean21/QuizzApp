@@ -271,7 +271,7 @@ export function QuestionEditorModal({
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-auto p-5">
+        <div className="min-h-0 flex-1 overflow-auto p-5 no-scrollbar">
           {loading ? (
             <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 size-4 animate-spin" /> Se încarcă întrebările...

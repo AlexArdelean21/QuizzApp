@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Building2, Inbox, Link2, Pencil, Plus, Search, Trash2, Users as UsersIcon } from "lucide-react"
+import { Building2, ChevronDown, Inbox, Link2, Pencil, Plus, Search, Trash2, Users as UsersIcon } from "lucide-react"
 import {
   assignUserToOrganization,
   createOrganization,
@@ -13,6 +13,7 @@ import {
   type AdminUserRow,
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
+import { ModalPortal } from "@/components/ui/modal-portal"
 import { InviteManagement } from "@/components/admin/InviteManagement"
 import type { AppRole } from "@/lib/auth/roles"
 
@@ -56,6 +57,8 @@ export function OrganizationManagement({
   const [searchUser, setSearchUser] = useState("")
   const [userFilter, setUserFilter] = useState<UserFilter>("lobby")
   const [expandedOrgInvite, setExpandedOrgInvite] = useState<string | null>(null)
+  const [orgsCollapsed, setOrgsCollapsed] = useState(false)
+  const [usersCollapsed, setUsersCollapsed] = useState(false)
 
   const [creating, startCreate] = useTransition()
   const [saving, startSave] = useTransition()
@@ -195,9 +198,15 @@ export function OrganizationManagement({
     <div className="flex flex-col gap-6">
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 pb-4 dark:border-slate-800">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <div
+            className="flex-1 cursor-pointer select-none"
+            onClick={() => setOrgsCollapsed((prev) => !prev)}
+          >
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
               Organizații
+              <ChevronDown
+                className={`size-4 text-slate-400 transition-transform duration-200 ${orgsCollapsed ? "-rotate-90" : ""}`}
+              />
             </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Creează și administrează organizațiile platformei.
@@ -213,6 +222,7 @@ export function OrganizationManagement({
           </Button>
         </div>
 
+        {!orgsCollapsed ? (
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200/70 dark:border-slate-800">
           <table className="min-w-full divide-y divide-slate-200/70 text-sm dark:divide-slate-800">
             <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
@@ -318,6 +328,7 @@ export function OrganizationManagement({
             </tbody>
           </table>
         </div>
+        ) : null}
 
         {toast ? (
           <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${toastClasses}`}>
@@ -328,9 +339,15 @@ export function OrganizationManagement({
 
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 pb-4 dark:border-slate-800">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <div
+            className="flex-1 cursor-pointer select-none"
+            onClick={() => setUsersCollapsed((prev) => !prev)}
+          >
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
               Lobby utilizatori
+              <ChevronDown
+                className={`size-4 text-slate-400 transition-transform duration-200 ${usersCollapsed ? "-rotate-90" : ""}`}
+              />
             </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Utilizatorii noi încep aici. Asignează-i la o organizație și, dacă e cazul, promovează-i ca org admin.
@@ -349,6 +366,8 @@ export function OrganizationManagement({
           )}
         </div>
 
+        {!usersCollapsed ? (
+        <>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-medium dark:border-slate-800 dark:bg-slate-950">
             {(
@@ -497,9 +516,12 @@ export function OrganizationManagement({
             </tbody>
           </table>
         </div>
+        </>
+        ) : null}
       </section>
 
       {showCreateModal ? (
+        <ModalPortal>
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
           <button
             type="button"
@@ -556,9 +578,11 @@ export function OrganizationManagement({
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {editTarget ? (
+        <ModalPortal>
         <div className="fixed inset-0 z-[91] flex items-center justify-center p-4">
           <button
             type="button"
@@ -610,9 +634,11 @@ export function OrganizationManagement({
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {deleteTarget ? (
+        <ModalPortal>
         <div className="fixed inset-0 z-[92] flex items-center justify-center p-4">
           <button
             type="button"
@@ -666,6 +692,7 @@ export function OrganizationManagement({
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
     </div>
   )
