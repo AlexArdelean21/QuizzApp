@@ -5,6 +5,7 @@ import { GlobalHeader } from "@/components/global-header";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { SwipeNavigator } from "@/components/swipe-navigator";
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css";
 
 const geistSans = Geist({
@@ -56,6 +57,7 @@ export default function RootLayout({
         </SidebarLayout>
         <BottomTabBar />
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
