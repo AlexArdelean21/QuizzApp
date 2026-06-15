@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
-import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
+import {
+  getSupabaseCookieOptions,
+  REMEMBER_COOKIE_NAME,
+  REMEMBER_FLAG_COOKIE_OPTIONS,
+  SUPABASE_COOKIE_BASE,
+} from "@/lib/supabase/cookie-options"
 import { isAdminRole } from "@/lib/auth/roles"
 
 type LoginBody = {
@@ -32,20 +37,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 })
   }
 
-  const cookieOptions = rememberMe
-    ? SUPABASE_COOKIE_OPTIONS
-    : {
-        path: SUPABASE_COOKIE_OPTIONS.path,
-        sameSite: SUPABASE_COOKIE_OPTIONS.sameSite,
-        secure: SUPABASE_COOKIE_OPTIONS.secure,
-        httpOnly: SUPABASE_COOKIE_OPTIONS.httpOnly,
-      }
+  const cookieOptions = getSupabaseCookieOptions(rememberMe)
 
   const pendingCookies: Array<{ name: string; value: string }> = []
   const forwardHeaders = new Headers()
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookieOptions: SUPABASE_COOKIE_OPTIONS,
+    cookieOptions: SUPABASE_COOKIE_BASE,
     cookies: {
       getAll() {
         return request.cookies.getAll()
@@ -78,6 +76,7 @@ export async function POST(request: NextRequest) {
     pendingCookies.forEach(({ name, value }) => {
       response.cookies.set(name, value, cookieOptions)
     })
+    response.cookies.set(REMEMBER_COOKIE_NAME, rememberMe ? "1" : "0", REMEMBER_FLAG_COOKIE_OPTIONS)
     forwardHeaders.forEach((value, key) => response.headers.set(key, value))
     return response
   }
@@ -94,6 +93,7 @@ export async function POST(request: NextRequest) {
   pendingCookies.forEach(({ name, value }) => {
     response.cookies.set(name, value, cookieOptions)
   })
+  response.cookies.set(REMEMBER_COOKIE_NAME, rememberMe ? "1" : "0", REMEMBER_FLAG_COOKIE_OPTIONS)
   forwardHeaders.forEach((value, key) => response.headers.set(key, value))
   return response
 }

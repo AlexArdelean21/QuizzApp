@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
-import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
+import {
+  getSupabaseCookieOptions,
+  REMEMBER_COOKIE_NAME,
+  SUPABASE_COOKIE_BASE,
+} from "@/lib/supabase/cookie-options"
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/auth", "/api/webhooks", "/join", "/docs"]
 
@@ -12,6 +16,8 @@ const PUBLIC_UNAUTH_ROUTES = ["/", "/docs"]
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
+  const remember = request.cookies.get(REMEMBER_COOKIE_NAME)?.value === "1"
+  const authCookieOptions = getSupabaseCookieOptions(remember)
   const isPublic = PUBLIC_PATHS.some(
     (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`)
   )
@@ -34,7 +40,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookieOptions: SUPABASE_COOKIE_OPTIONS,
+    cookieOptions: SUPABASE_COOKIE_BASE,
     cookies: {
       getAll() {
         return request.cookies.getAll()
@@ -45,7 +51,7 @@ export async function updateSession(request: NextRequest) {
         })
         response = NextResponse.next({ request })
         cookiesToSet.forEach(({ name, value }) => {
-          response.cookies.set(name, value, SUPABASE_COOKIE_OPTIONS)
+          response.cookies.set(name, value, authCookieOptions)
         })
       },
     },

@@ -1,6 +1,10 @@
 import { cookies } from "next/headers"
-import { createServerClient, type CookieOptions } from "@supabase/ssr"
-import { SUPABASE_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options"
+import { createServerClient } from "@supabase/ssr"
+import {
+  getSupabaseCookieOptions,
+  REMEMBER_COOKIE_NAME,
+  SUPABASE_COOKIE_BASE,
+} from "@/lib/supabase/cookie-options"
 
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies()
@@ -13,18 +17,19 @@ export async function createSupabaseServerClient() {
     )
   }
 
+  const remember = cookieStore.get(REMEMBER_COOKIE_NAME)?.value === "1"
+  const authCookieOptions = getSupabaseCookieOptions(remember)
+
   return createServerClient(supabaseUrl, supabaseAnonKey, {
-    // cookieOptions is merged into every Set-Cookie the library writes, so
-    // the options object received in setAll already reflects these values.
-    cookieOptions: SUPABASE_COOKIE_OPTIONS,
+    cookieOptions: SUPABASE_COOKIE_BASE,
     cookies: {
       getAll() {
         return cookieStore.getAll()
       },
       setAll(cookiesToSet) {
         try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options as CookieOptions)
+          cookiesToSet.forEach(({ name, value }) =>
+            cookieStore.set(name, value, authCookieOptions)
           )
         } catch {
           // setAll is called from a Server Component where cookies().set()
