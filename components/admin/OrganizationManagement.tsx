@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Building2, ChevronDown, Inbox, Link2, Pencil, Plus, Search, Trash2, Users as UsersIcon } from "lucide-react"
 import {
@@ -15,9 +15,20 @@ import {
 import { Button } from "@/components/ui/button"
 import { ModalPortal } from "@/components/ui/modal-portal"
 import { InviteManagement } from "@/components/admin/InviteManagement"
+import { DataTable, type Column } from "@/components/ui/data-table"
 import type { AppRole } from "@/lib/auth/roles"
 
 type Toast = { type: "success" | "error"; message: string } | null
+
+type OrgRow = {
+  org: AdminOrganizationRow
+  orgStats: { users: number; exams: number }
+}
+
+type LobbyUserRow = {
+  user: AdminUserRow
+  orgName: string | null
+}
 
 type OrganizationManagementProps = {
   organizations: AdminOrganizationRow[]
@@ -189,6 +200,216 @@ export function OrganizationManagement({
     })
   }, [users, searchUser, userFilter])
 
+  const orgRows = useMemo<OrgRow[]>(
+    () =>
+      organizations.map((org) => ({
+        org,
+        orgStats: stats[org.id] ?? { users: 0, exams: 0 },
+      })),
+    [organizations, stats],
+  )
+
+  const orgColumns = useMemo<Column<OrgRow>[]>(
+    () => [
+      {
+        key: "organizatie",
+        header: "Organizație",
+        pin: "left",
+        minWidth: 220,
+        render: ({ org }) => (
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-300">
+              <Building2 className="size-4" />
+            </div>
+            <div>
+              <p className="font-medium text-slate-900 dark:text-white">{org.nume}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">ID {org.id.slice(0, 8)}…</p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "slug",
+        header: "Slug",
+        minWidth: 120,
+        render: ({ org }) => <span className="text-slate-600 dark:text-slate-300">{org.slug}</span>,
+      },
+      {
+        key: "utilizatori",
+        header: "Utilizatori",
+        align: "right",
+        minWidth: 100,
+        render: ({ orgStats }) => <span className="text-slate-700 dark:text-slate-200">{orgStats.users}</span>,
+      },
+      {
+        key: "examene",
+        header: "Examene",
+        align: "right",
+        minWidth: 100,
+        render: ({ orgStats }) => <span className="text-slate-700 dark:text-slate-200">{orgStats.exams}</span>,
+      },
+      {
+        key: "actiuni",
+        header: "Acțiuni",
+        minWidth: 240,
+        align: "right",
+        render: ({ org }) => {
+          const inviteOpen = expandedOrgInvite === org.id
+          return (
+            <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={inviteOpen ? "default" : "outline"}
+                onClick={() =>
+                  setExpandedOrgInvite((current) => (current === org.id ? null : org.id))
+                }
+                className={inviteOpen ? "bg-blue-600 text-white hover:bg-blue-500" : undefined}
+              >
+                <Link2 className="mr-1 size-3.5" />
+                Invite Links
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditTarget(org)
+                  setEditNume(org.nume)
+                  setEditSlug(org.slug)
+                }}
+              >
+                <Pencil className="mr-1 size-3.5" />
+                Editează
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  setDeleteTarget(org)
+                  setDeleteConfirm("")
+                }}
+              >
+                <Trash2 className="mr-1 size-3.5" />
+                Șterge
+              </Button>
+            </div>
+          )
+        },
+      },
+    ],
+    [expandedOrgInvite],
+  )
+
+  const lobbyRows = useMemo<LobbyUserRow[]>(
+    () =>
+      filteredUsers.map((user) => ({
+        user,
+        orgName: user.org_nume ?? (user.org_id ? orgNameById.get(user.org_id) ?? null : null),
+      })),
+    [filteredUsers, orgNameById],
+  )
+
+  const lobbyColumns = useMemo<Column<LobbyUserRow>[]>(
+    () => [
+      {
+        key: "utilizator",
+        header: "Utilizator",
+        pin: "left",
+        minWidth: 220,
+        render: ({ user }) => (
+          <div>
+            <p className="font-medium text-slate-900 dark:text-white">{user.email ?? "—"}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{user.nume ?? "—"}</p>
+          </div>
+        ),
+      },
+      {
+        key: "rol",
+        header: "Rol",
+        minWidth: 120,
+        render: ({ user }) => (
+          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[user.role]}`}>
+            {ROLE_LABELS[user.role]}
+          </span>
+        ),
+      },
+      {
+        key: "organizatie",
+        header: "Organizație",
+        minWidth: 220,
+        render: ({ user, orgName }) => (
+          <>
+            <select
+              value={user.org_id ?? ""}
+              onChange={(event) =>
+                handleAssignOrg(user.id, event.target.value ? event.target.value : null)
+              }
+              disabled={updatingUser || user.role === "super_admin"}
+              title={
+                user.role === "super_admin"
+                  ? "Super admin nu poate fi mutat în altă organizație."
+                  : undefined
+              }
+              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">— Fără organizație —</option>
+              {organizations.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.nume}
+                </option>
+              ))}
+            </select>
+            {orgName && (
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Curent: {orgName}</p>
+            )}
+          </>
+        ),
+      },
+      {
+        key: "actiuni",
+        header: "Acțiuni",
+        minWidth: 200,
+        align: "right",
+        render: ({ user }) => (
+          <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={
+                updatingUser ||
+                user.role === "org_admin" ||
+                user.role === "super_admin" ||
+                !user.org_id
+              }
+              title={
+                user.role === "super_admin" ? "Super admin nu poate fi modificat." : undefined
+              }
+              onClick={() => handleSetRole(user.id, "org_admin")}
+            >
+              Setează Org Admin
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={updatingUser || user.role === "user" || user.role === "super_admin"}
+              title={
+                user.role === "super_admin" ? "Super admin nu poate fi modificat." : undefined
+              }
+              onClick={() => handleSetRole(user.id, "user")}
+            >
+              Resetează la user
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [organizations, updatingUser, handleAssignOrg, handleSetRole],
+  )
+
   const toastClasses =
     toast?.type === "success"
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
@@ -223,110 +444,31 @@ export function OrganizationManagement({
         </div>
 
         {!orgsCollapsed ? (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200/70 dark:border-slate-800">
-          <table className="min-w-full divide-y divide-slate-200/70 text-sm dark:divide-slate-800">
-            <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-              <tr>
-                <th className="px-4 py-3">Organizație</th>
-                <th className="px-4 py-3">Slug</th>
-                <th className="px-4 py-3">Utilizatori</th>
-                <th className="px-4 py-3">Examene</th>
-                <th className="px-4 py-3 text-right">Acțiuni</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200/70 bg-white dark:divide-slate-800 dark:bg-slate-900">
-              {organizations.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                    Nu există organizații încă.
-                  </td>
-                </tr>
-              ) : (
-                organizations.map((org) => {
-                  const orgStats = stats[org.id] ?? { users: 0, exams: 0 }
-                  const inviteOpen = expandedOrgInvite === org.id
-                  return (
-                    <Fragment key={org.id}>
-                      <tr className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/15 text-blue-700 dark:text-blue-300">
-                              <Building2 className="size-4" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-slate-900 dark:text-white">{org.nume}</p>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                ID {org.id.slice(0, 8)}…
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{org.slug}</td>
-                        <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{orgStats.users}</td>
-                        <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{orgStats.exams}</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={inviteOpen ? "default" : "outline"}
-                              onClick={() =>
-                                setExpandedOrgInvite((current) =>
-                                  current === org.id ? null : org.id
-                                )
-                              }
-                              className={
-                                inviteOpen ? "bg-blue-600 text-white hover:bg-blue-500" : undefined
-                              }
-                            >
-                              <Link2 className="mr-1 size-3.5" />
-                              Invite Links
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditTarget(org)
-                                setEditNume(org.nume)
-                                setEditSlug(org.slug)
-                              }}
-                            >
-                              <Pencil className="mr-1 size-3.5" />
-                              Editează
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => {
-                                setDeleteTarget(org)
-                                setDeleteConfirm("")
-                              }}
-                            >
-                              <Trash2 className="mr-1 size-3.5" />
-                              Șterge
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                      {inviteOpen ? (
-                        <tr className="bg-slate-50/60 dark:bg-slate-950/40">
-                          <td colSpan={5} className="px-4 py-4">
-                            <InviteManagement
-                              orgId={org.id}
-                              inviteLinksEnabled={org.invite_links_enabled ?? false}
-                              isSuperAdmin={true}
-                            />
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <DataTable
+            rows={orgRows}
+            columns={orgColumns}
+            totalCount={orgRows.length}
+            pageSize={orgRows.length || 1}
+            currentPage={1}
+            buildHref={() => "#"}
+            emptyState={{ title: "Nu există organizații încă." }}
+          />
+          {expandedOrgInvite
+            ? (() => {
+                const org = organizations.find((o) => o.id === expandedOrgInvite)
+                if (!org) return null
+                return (
+                  <div className="mt-3 rounded-xl border border-slate-200/70 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                    <InviteManagement
+                      orgId={org.id}
+                      inviteLinksEnabled={org.invite_links_enabled ?? false}
+                      isSuperAdmin={true}
+                    />
+                  </div>
+                )
+              })()
+            : null}
         </div>
         ) : null}
 
@@ -403,118 +545,16 @@ export function OrganizationManagement({
             />
           </div>
         </div>
-        <div className="mt-3" />
-
-        <div className="overflow-x-auto rounded-xl border border-slate-200/70 dark:border-slate-800">
-          <table className="min-w-full divide-y divide-slate-200/70 text-sm dark:divide-slate-800">
-            <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-              <tr>
-                <th className="px-4 py-3">Utilizator</th>
-                <th className="px-4 py-3">Rol</th>
-                <th className="px-4 py-3">Organizație</th>
-                <th className="px-4 py-3 text-right">Acțiuni</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200/70 bg-white dark:divide-slate-800 dark:bg-slate-900">
-              {filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                    Nu am găsit utilizatori.
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map((user) => {
-                  const orgName = user.org_nume ?? (user.org_id ? orgNameById.get(user.org_id) ?? null : null)
-                  return (
-                    <tr
-                      key={user.id}
-                      className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60"
-                    >
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-slate-900 dark:text-white">
-                          {user.email ?? "—"}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{user.nume ?? ""}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[user.role]}`}
-                        >
-                          {ROLE_LABELS[user.role]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={user.org_id ?? ""}
-                          onChange={(event) =>
-                            handleAssignOrg(user.id, event.target.value ? event.target.value : null)
-                          }
-                          disabled={updatingUser || user.role === "super_admin"}
-                          title={
-                            user.role === "super_admin"
-                              ? "Super admin nu poate fi mutat în altă organizație."
-                              : undefined
-                          }
-                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <option value="">— Fără organizație —</option>
-                          {organizations.map((org) => (
-                            <option key={org.id} value={org.id}>
-                              {org.nume}
-                            </option>
-                          ))}
-                        </select>
-                        {orgName && (
-                          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Curent: {orgName}</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={
-                              updatingUser ||
-                              user.role === "org_admin" ||
-                              user.role === "super_admin" ||
-                              !user.org_id
-                            }
-                            title={
-                              user.role === "super_admin"
-                                ? "Super admin nu poate fi modificat."
-                                : undefined
-                            }
-                            onClick={() => handleSetRole(user.id, "org_admin")}
-                          >
-                            Setează Org Admin
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={
-                              updatingUser ||
-                              user.role === "user" ||
-                              user.role === "super_admin"
-                            }
-                            title={
-                              user.role === "super_admin"
-                                ? "Super admin nu poate fi modificat."
-                                : undefined
-                            }
-                            onClick={() => handleSetRole(user.id, "user")}
-                          >
-                            Resetează la user
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="mt-3">
+          <DataTable
+            rows={lobbyRows}
+            columns={lobbyColumns}
+            totalCount={lobbyRows.length}
+            pageSize={lobbyRows.length || 1}
+            currentPage={1}
+            buildHref={() => "#"}
+            emptyState={{ title: "Nu am găsit utilizatori." }}
+          />
         </div>
         </>
         ) : null}

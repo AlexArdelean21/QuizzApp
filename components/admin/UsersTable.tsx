@@ -9,6 +9,18 @@ import type {
   AdminUserRow,
 } from "@/app/admin/actions"
 import type { AppRole } from "@/lib/auth/roles"
+import { DataTable, type Column } from "@/components/ui/data-table"
+
+// Tip intern pentru rândul de tabel — oglindește AdminUserRow + câmpuri derivate
+type UserTableRow = {
+  profile: AdminUserRow
+  orgName: string | null
+  isCurrentUser: boolean
+  canEditRole: boolean
+  canDelete: boolean
+  isAdminRole: boolean
+  userAccess: string[]
+}
 
 export type UsersTableProps = {
   profiles: AdminUserRow[]
@@ -86,8 +98,6 @@ export function UsersTable({
     })
   }, [profiles, isSuperAdmin, selectedOrg, orgFilter])
 
-  const colSpan = isSuperAdmin ? 6 : 5
-
   const handleGrantAccess = (userId: string) => {
     const selectedExamId = selectedExamByUser[userId] ?? defaultExamId
     const selectedDays = Math.max(1, Number(daysByUser[userId] ?? 30))
@@ -153,6 +163,216 @@ export function UsersTable({
     })
   }
 
+  const userRows = useMemo<UserTableRow[]>(() => {
+    return displayedProfiles.map((profile) => {
+      const isCurrentUser = profile.id === currentUserId
+      const role = profile.role
+      const isAdminRole = role === "super_admin" || role === "org_admin"
+      const orgName =
+        profile.org_nume ??
+        (profile.org_id ? orgNameById.get(profile.org_id) ?? null : null)
+      const isOrgAdminPeer = !isSuperAdmin && role === "org_admin"
+      const canEditRole = isSuperAdmin && !isCurrentUser && role !== "super_admin"
+      const canDelete = !isCurrentUser && !isOrgAdminPeer
+      const userAccess = activeAccessByUser[profile.id] ?? []
+      return { profile, orgName, isCurrentUser, canEditRole, canDelete, isAdminRole, userAccess }
+    })
+  }, [displayedProfiles, currentUserId, isSuperAdmin, orgNameById, activeAccessByUser])
+
+  const columns = useMemo<Column<UserTableRow>[]>(() => {
+    const cols: Column<UserTableRow>[] = [
+      {
+        key: "email",
+        header: "Email",
+        pin: "left",
+        minWidth: 220,
+        noWrap: true,
+        render: ({ profile, isCurrentUser }) => (
+          <span className="text-slate-900 dark:text-white">
+            {profile.email ?? "-"}
+            {isCurrentUser && (
+              <span className="ml-2 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                TU
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        key: "nume",
+        header: "Nume",
+        minWidth: 140,
+        render: ({ profile }) => (
+          <span className="text-slate-700 dark:text-slate-200">{profile.nume ?? "—"}</span>
+        ),
+      },
+      {
+        key: "rol",
+        header: "Rol",
+        minWidth: 130,
+        render: ({ profile, canEditRole }) => {
+          const role = profile.role
+          return canEditRole ? (
+            <select
+              value={role}
+              onChange={(event) => handleChangeRole(profile.id, event.target.value as AppRole)}
+              disabled={isPending && pendingAction?.userId === profile.id}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
+              <option value="user">User</option>
+              <option value="org_admin">Org Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          ) : (
+            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[role]}`}>
+              {ROLE_LABELS[role]}
+            </span>
+          )
+        },
+      },
+      ...(isSuperAdmin
+        ? [{
+            key: "organizatie",
+            header: "Organizație",
+            minWidth: 140,
+            render: ({ orgName }: UserTableRow) => (
+              <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                {orgName ?? "—"}
+              </span>
+            ),
+          } satisfies Column<UserTableRow>]
+        : []),
+      {
+        key: "acces",
+        header: "Acces activ",
+        minWidth: 160,
+        render: ({ isAdminRole, userAccess, profile }) => {
+          if (isAdminRole) {
+            return (
+              <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                <ShieldCheck className="size-3" />
+                Acces Admin
+              </span>
+            )
+          }
+          if (userAccess.length > 0) {
+            const hasAll = examene.length > 0 && userAccess.length >= examene.length
+            if (hasAll) {
+              return (
+                <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                  Toate ({examene.length})
+                </span>
+              )
+            }
+            return (
+              <div className="flex max-w-[180px] flex-col gap-1">
+                {userAccess.slice(0, 3).map((examName) => (
+                  <span
+                    key={`${profile.id}-${examName}`}
+                    title={examName}
+                    className="block truncate rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                  >
+                    {examName}
+                  </span>
+                ))}
+                {userAccess.length > 3 && (
+                  <span className="pl-1 text-[11px] text-slate-400 dark:text-slate-500">
+                    +{userAccess.length - 3} mai multe
+                  </span>
+                )}
+              </div>
+            )
+          }
+          return (
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              Fără acces
+            </span>
+          )
+        },
+      },
+      {
+        key: "actiuni",
+        header: "Acțiuni",
+        minWidth: 140,
+        align: "right",
+        render: ({ profile, canDelete, isAdminRole }) => {
+          const isOrgAdminPeer = !isSuperAdmin && profile.role === "org_admin"
+          return (
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {!isAdminRole && (
+                <>
+                  <select
+                    value={selectedExamByUser[profile.id] ?? defaultExamId ?? ""}
+                    onChange={(event) =>
+                      setSelectedExamByUser((prev) => ({
+                        ...prev,
+                        [profile.id]: Number(event.target.value),
+                      }))
+                    }
+                    disabled={isPending || examene.length === 0}
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    {examene.length === 0 ? (
+                      <option value="">No exams</option>
+                    ) : (
+                      examene.map((exam) => (
+                        <option key={exam.id} value={exam.id}>
+                          {exam.nume_examen}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    value={daysByUser[profile.id] ?? 30}
+                    onChange={(event) =>
+                      setDaysByUser((prev) => ({
+                        ...prev,
+                        [profile.id]: Number(event.target.value),
+                      }))
+                    }
+                    disabled={isPending}
+                    className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleGrantAccess(profile.id)}
+                    disabled={isPending || examene.length === 0}
+                    className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    {pendingAction?.type === "grant" && pendingAction.userId === profile.id
+                      ? "Se acordă..."
+                      : "Acordă acces"}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => handleDeleteUserClick(profile.id, profile.email, profile.nume)}
+                disabled={isPending || !canDelete}
+                title={
+                  isOrgAdminPeer
+                    ? "Doar super admin poate șterge un org admin"
+                    : undefined
+                }
+                className="flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-40 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
+              >
+                <Trash2 className="size-3" />
+                {pendingAction?.type === "delete" && pendingAction.userId === profile.id
+                  ? "..."
+                  : "Șterge"}
+              </button>
+            </div>
+          )
+        },
+      },
+    ]
+    return cols
+  }, [isSuperAdmin, isPending, pendingAction, handleGrantAccess, handleChangeRole,
+      handleDeleteUserClick, selectedExamByUser, daysByUser, defaultExamId,
+      activeAccessByUser, examene])
+
   return (
     <div className="space-y-3">
       {/* Org filter — super_admin only */}
@@ -178,216 +398,15 @@ export function UsersTable({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200/70 dark:border-slate-800">
-        <table className="min-w-full divide-y divide-slate-200/70 text-sm dark:divide-slate-800">
-          <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Nume</th>
-              <th className="px-4 py-3">Rol</th>
-              {isSuperAdmin && <th className="px-4 py-3">Organizație</th>}
-              <th className="px-4 py-3">Acces activ</th>
-              <th className="px-4 py-3 text-right">Acțiuni</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200/70 bg-white dark:divide-slate-800 dark:bg-slate-900">
-            {displayedProfiles.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={colSpan}
-                  className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400"
-                >
-                  Nu am găsit utilizatori.
-                </td>
-              </tr>
-            ) : (
-              displayedProfiles.map((profile) => {
-                const isCurrentUser = profile.id === currentUserId
-                const role = profile.role
-                const isAdminRole = role === "super_admin" || role === "org_admin"
-                const orgName =
-                  profile.org_nume ??
-                  (profile.org_id ? orgNameById.get(profile.org_id) ?? null : null)
-                const isOrgAdminPeer = !isSuperAdmin && role === "org_admin"
-                // Role editing: super_admin only, never yourself, never another super_admin.
-                // Protecting super_admin rows prevents accidental demotion / lockout.
-                const canEditRole = isSuperAdmin && !isCurrentUser && role !== "super_admin"
-                const canDelete = !isCurrentUser && !isOrgAdminPeer
-
-                return (
-                  <tr
-                    key={profile.id}
-                    className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-950/60"
-                  >
-                    {/* Email */}
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-900 dark:text-white">
-                      {profile.email ?? "-"}
-                      {isCurrentUser && (
-                        <span className="ml-2 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-                          TU
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Nume */}
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-700 dark:text-slate-200">
-                      {profile.nume ?? "—"}
-                    </td>
-
-                    {/* Rol */}
-                    <td className="px-4 py-3">
-                      {canEditRole ? (
-                        <select
-                          value={role}
-                          onChange={(event) =>
-                            handleChangeRole(profile.id, event.target.value as AppRole)
-                          }
-                          disabled={isPending && pendingAction?.userId === profile.id}
-                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        >
-                          <option value="user">User</option>
-                          <option value="org_admin">Org Admin</option>
-                          <option value="super_admin">Super Admin</option>
-                        </select>
-                      ) : (
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[role]}`}
-                        >
-                          {ROLE_LABELS[role]}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Organizație (super_admin only) */}
-                    {isSuperAdmin && (
-                      <td className="px-4 py-3 text-xs">
-                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                          {orgName ?? "—"}
-                        </span>
-                      </td>
-                    )}
-
-                    {/* Acces activ */}
-                    <td className="px-4 py-3">
-                      {isAdminRole ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
-                          <ShieldCheck className="size-3" />
-                          Acces Admin
-                        </span>
-                      ) : (activeAccessByUser[profile.id] ?? []).length > 0 ? (
-                        (() => {
-                          const userAccess = activeAccessByUser[profile.id] ?? []
-                          const hasAll = examene.length > 0 && userAccess.length >= examene.length
-                          if (hasAll) {
-                            return (
-                              <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                                Toate ({examene.length})
-                              </span>
-                            )
-                          }
-                          return (
-                            <div className="flex max-w-[180px] flex-col gap-1">
-                              {userAccess.slice(0, 3).map((examName) => (
-                                <span
-                                  key={`${profile.id}-${examName}`}
-                                  title={examName}
-                                  className="block truncate rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
-                                >
-                                  {examName}
-                                </span>
-                              ))}
-                              {userAccess.length > 3 && (
-                                <span className="pl-1 text-[11px] text-slate-400 dark:text-slate-500">
-                                  +{userAccess.length - 3} mai multe
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })()
-                      ) : (
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          Fără acces
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Acțiuni */}
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center justify-end gap-1.5">
-                        {/* Grant access controls — hidden for admin roles */}
-                        {!isAdminRole && (
-                          <>
-                            <select
-                              value={selectedExamByUser[profile.id] ?? defaultExamId ?? ""}
-                              onChange={(event) =>
-                                setSelectedExamByUser((prev) => ({
-                                  ...prev,
-                                  [profile.id]: Number(event.target.value),
-                                }))
-                              }
-                              disabled={isPending || examene.length === 0}
-                              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 transition focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            >
-                              {examene.length === 0 ? (
-                                <option value="">No exams</option>
-                              ) : (
-                                examene.map((exam) => (
-                                  <option key={exam.id} value={exam.id}>
-                                    {exam.nume_examen}
-                                  </option>
-                                ))
-                              )}
-                            </select>
-                            <input
-                              type="number"
-                              min={1}
-                              value={daysByUser[profile.id] ?? 30}
-                              onChange={(event) =>
-                                setDaysByUser((prev) => ({
-                                  ...prev,
-                                  [profile.id]: Number(event.target.value),
-                                }))
-                              }
-                              disabled={isPending}
-                              className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleGrantAccess(profile.id)}
-                              disabled={isPending || examene.length === 0}
-                              className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                            >
-                              {pendingAction?.type === "grant" && pendingAction.userId === profile.id
-                                ? "Se acordă..."
-                                : "Acordă acces"}
-                            </button>
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUserClick(profile.id, profile.email, profile.nume)}
-                          disabled={isPending || !canDelete}
-                          title={
-                            isOrgAdminPeer
-                              ? "Doar super admin poate șterge un org admin"
-                              : undefined
-                          }
-                          className="flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-40 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
-                        >
-                          <Trash2 className="size-3" />
-                          {pendingAction?.type === "delete" && pendingAction.userId === profile.id
-                            ? "..."
-                            : "Șterge"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        rows={userRows}
+        columns={columns}
+        totalCount={userRows.length}
+        pageSize={userRows.length || 1}
+        currentPage={1}
+        buildHref={() => "#"}
+        emptyState={{ title: "Nu am găsit utilizatori." }}
+      />
 
       {deleteUserTarget ? (
         <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
