@@ -8,6 +8,20 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)")
+    setIsDesktop(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
+
+  return isDesktop
+}
+
 export type Column<TRow> = {
   key: string
   header: React.ReactNode
@@ -74,6 +88,7 @@ export function DataTable<TRow>({
   buildHref,
 }: DataTableProps<TRow>) {
   const router = useRouter()
+  const isDesktop = useIsDesktop()
   const [searchInput, setSearchInput] = useState(currentSearch ?? "")
 
   useEffect(() => {
@@ -155,7 +170,7 @@ export function DataTable<TRow>({
       const style: React.CSSProperties = {}
       if (column.width != null) style.width = column.width
       if (column.minWidth != null) style.minWidth = column.minWidth
-      if (column.pin === "left") {
+      if (column.pin === "left" && isDesktop) {
         const i = leftPins.findIndex((c) => c.key === column.key)
         style.position = "sticky"
         style.left = leftPins.slice(0, i).reduce((s, c) => s + (c.width ?? DEFAULT_PIN_WIDTH), 0)
@@ -163,7 +178,7 @@ export function DataTable<TRow>({
         if (column.key === lastLeftPinKey && !scroll.atStart) {
           style.boxShadow = "8px 0 12px -8px rgb(0 0 0 / 0.18)"
         }
-      } else if (column.pin === "right") {
+      } else if (column.pin === "right" && isDesktop) {
         const i = rightPins.findIndex((c) => c.key === column.key)
         style.position = "sticky"
         style.right = rightPins.slice(i + 1).reduce((s, c) => s + (c.width ?? DEFAULT_PIN_WIDTH), 0)
@@ -230,7 +245,7 @@ export function DataTable<TRow>({
                     className={cn(
                       alignClass(column.align),
                       column.headerClassName,
-                      column.pin && "bg-card",
+                      column.pin && isDesktop && "bg-card",
                       (column.noWrap ?? Boolean(column.pin)) && "whitespace-nowrap",
                     )}
                     style={cellStyle(column, "head")}
@@ -288,7 +303,7 @@ export function DataTable<TRow>({
                       className={cn(
                         alignClass(column.align),
                         column.cellClassName,
-                        column.pin && "bg-card group-hover/row:bg-muted transition-[box-shadow,background-color]",
+                        column.pin && isDesktop && "bg-card group-hover/row:bg-muted transition-[box-shadow,background-color]",
                         (column.noWrap ?? Boolean(column.pin)) && "whitespace-nowrap",
                       )}
                       style={cellStyle(column, "cell")}
