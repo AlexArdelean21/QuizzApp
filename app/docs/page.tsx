@@ -5,11 +5,79 @@ import {
   CheckCircle2, Clock, HelpCircle
 } from "lucide-react"
 import { DocsThemeToggle } from "@/components/docs/DocsThemeToggle"
+import { CopyPromptBlock } from "@/components/docs/CopyPromptBlock"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export const metadata = {
   title: "Documentație — QuizHub",
   description: "Ghid complet pentru utilizarea platformei QuizHub",
 }
+
+const JSON_PROMPT = `Transformă întrebările din documentul atașat în format JSON pentru platforma QuizHub.
+
+Reguli stricte:
+- Returnează DOAR JSON valid, fără text înainte sau după, fără blocuri markdown.
+- Structura: un obiect cu un câmp "questions" care e un array.
+- Fiecare întrebare are: "question" (textul întrebării, string), "answers" (array de string-uri, între 2 și 10 variante), "correct" (array de numere).
+- IMPORTANT: indicii din "correct" sunt 1-based. Primul răspuns = 1, al doilea = 2, etc. (NU 0-based).
+- Pentru o singură variantă corectă: "correct": [2]. Pentru mai multe: "correct": [1, 3].
+- Nu inventa întrebări. Folosește doar ce e în document.
+- Dacă o întrebare nu are răspunsul marcat, alege varianta corectă pe baza cunoștințelor tale.
+
+Exemplu de format:
+{
+  "questions": [
+    {
+      "question": "Care este tensiunea nominală?",
+      "answers": ["220V", "110V", "380V"],
+      "correct": [1]
+    }
+  ]
+}
+
+Documentul cu întrebări este atașat mai jos.`
+
+const EXCEL_PROMPT = `Transformă întrebările din documentul atașat într-un tabel pentru un fișier Excel (.xlsx) compatibil cu platforma QuizHub.
+
+Reguli stricte:
+- Coloana A = textul întrebării.
+- Coloanele B, C, D, ... = variantele de răspuns (între 2 și 10 variante).
+- Un rând = o singură întrebare.
+- Marchează celula cu răspunsul corect colorând fundalul ei cu GALBEN.
+- Dacă o întrebare are mai multe răspunsuri corecte, colorează toate celulele corecte cu galben.
+- Nu inventa întrebări. Folosește doar ce e în document.
+- Dacă o întrebare nu are răspunsul marcat, alege varianta corectă pe baza cunoștințelor tale și colorează-o galben.
+
+Generează un tabel pe care îl pot copia direct într-un fișier Excel, indicând clar care celule trebuie colorate galben.
+
+Documentul cu întrebări este atașat mai jos.`
+
+// Aliniat la parserul real din parsePlainTextToQuestions (components/admin/ExamManagement.tsx):
+// întrebările trebuie numerotate ("1." / "1)"), variantele prefixate cu literă ("a)" / "a."),
+// iar răspunsul corect marcat cu "*" la finalul rândului acelei variante.
+const TEXT_PROMPT = `Transformă întrebările din documentul atașat în format text simplu pentru platforma QuizHub.
+
+Reguli stricte:
+- Numerotează fiecare întrebare: începe rândul cu numărul întrebării urmat de punct (ex: "1.").
+- Sub întrebare, listează fiecare variantă de răspuns pe câte un rând, prefixată cu o literă urmată de paranteză (ex: "a)", "b)", "c)").
+- Marchează răspunsul corect punând un asterisc (*) la finalul rândului acelei variante.
+- Lasă un rând gol între întrebări.
+- Pentru mai multe răspunsuri corecte, pune asterisc la finalul fiecărei variante corecte.
+- Nu inventa întrebări. Folosește doar ce e în document.
+- Dacă o întrebare nu are răspunsul marcat, alege varianta corectă pe baza cunoștințelor tale.
+
+Exemplu de format:
+1. Care este tensiunea nominală?
+a) 220V *
+b) 110V
+c) 380V
+
+2. Curentul alternativ are frecvența de:
+a) 50 Hz
+b) 60 Hz *
+c) 100 Hz
+
+Documentul cu întrebări este atașat mai jos.`
 
 const sections = [
   { id: "getting-started", label: "Primii pași" },
@@ -21,7 +89,13 @@ const sections = [
   { id: "import-text", label: "Import Text" },
 ]
 
-export default function DocsPage() {
+export default async function DocsPage() {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const isLoggedIn = Boolean(user)
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -49,12 +123,21 @@ export default function DocsPage() {
           {/* Right: theme toggle + login */}
           <div className="flex items-center gap-2">
             <DocsThemeToggle />
-            <Link
-              href="/login"
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-500 sm:px-4"
-            >
-              Login
-            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-500 sm:px-4"
+              >
+                Aplicație
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-500 sm:px-4"
+              >
+                Conectare
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -158,8 +241,8 @@ export default function DocsPage() {
             <div className="mt-6 space-y-4 text-sm text-muted-foreground">
               <p>Fiecare organizație e un spațiu separat cu propriii utilizatori și examene. Un utilizator poate aparține unei singure organizații.</p>
               <div className="grid gap-4 sm:grid-cols-2">
-                <RoleCard role="Org Admin" description="Gestionează organizația sa: adaugă examene, acordă acces utilizatorilor, vede statistici." />
-                <RoleCard role="User" description="Accesează examenele la care i s-a acordat acces. Vede propriile statistici." />
+                <RoleCard role="Admin Organizație" description="Gestionează organizația sa: adaugă examene, acordă acces utilizatorilor, vede statistici." />
+                <RoleCard role="Utilizator" description="Accesează examenele la care i s-a acordat acces. Vede propriile statistici." />
               </div>
             </div>
           </section>
@@ -181,6 +264,7 @@ export default function DocsPage() {
                 Duplicatele sunt detectate automat — aceeași întrebare nu va fi adăugată de două ori,
                 chiar dacă importezi același fișier de mai multe ori.
               </DocNote>
+              <CopyPromptBlock prompt={EXCEL_PROMPT} />
             </div>
           </section>
 
@@ -214,6 +298,7 @@ export default function DocsPage() {
               <DocNote>
                 Pentru răspunsuri multiple: <code className="rounded bg-muted px-1">{`"correct": [1, 3]`}</code> marchează primul și al treilea răspuns ca corecte.
               </DocNote>
+              <CopyPromptBlock prompt={JSON_PROMPT} />
             </div>
           </section>
 
@@ -239,6 +324,7 @@ c) 100 Hz`}</pre>
                   ["Răspuns corect", "* sau ✓ la final", "Adaugă după textul variantei corecte"],
                 ]}
               />
+              <CopyPromptBlock prompt={TEXT_PROMPT} />
             </div>
           </section>
 

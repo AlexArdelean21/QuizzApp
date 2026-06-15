@@ -121,6 +121,8 @@ export function BottomTabBar() {
   const isHidden =
     (pathname === "/" && !userEmail) ||
     pathname.startsWith("/login") ||
+    pathname === "/docs" ||
+    pathname.startsWith("/docs/") ||
     pathname.startsWith("/join") ||
     pathname === "/admin" ||
     pathname.startsWith("/admin/") ||
