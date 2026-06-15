@@ -9,6 +9,7 @@ import {
   type AdminQuestionRow,
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
+import { ModalPortal } from "@/components/ui/modal-portal"
 import {
   MAX_QUIZ_VARIANTS,
   MIN_QUIZ_VARIANTS,
@@ -232,6 +233,7 @@ export function QuestionEditorModal({
   }
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[98] flex items-center justify-center p-4">
       <button
         type="button"
@@ -240,7 +242,7 @@ export function QuestionEditorModal({
         onClick={closeEditor}
       />
 
-      <div className="relative z-10 flex h-[88vh] w-full max-w-6xl flex-col rounded-xl border border-border bg-card shadow-2xl">
+      <div className="relative z-10 flex max-h-[88vh] h-auto w-full max-w-6xl flex-col rounded-xl border border-border bg-card shadow-2xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
             <h4 className="text-lg font-semibold text-foreground">Editor întrebări</h4>
@@ -470,5 +472,6 @@ export function QuestionEditorModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }

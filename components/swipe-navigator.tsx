@@ -7,6 +7,20 @@ import { isAdminRole, isSuperAdminRole, normalizeRole } from "@/lib/auth/roles"
 
 type Role = "guest" | "user" | "org_admin" | "super_admin"
 
+function hasHorizontalScroll(element: HTMLElement | null): boolean {
+  let node: HTMLElement | null = element
+  while (node && node !== document.body) {
+    const style = window.getComputedStyle(node)
+    const overflowX = style.overflowX
+    const canScrollX =
+      (overflowX === "auto" || overflowX === "scroll") &&
+      node.scrollWidth > node.clientWidth + 2
+    if (canScrollX) return true
+    node = node.parentElement
+  }
+  return false
+}
+
 type TabEntry = {
   href: string | null
   kind: "route" | "profile"
@@ -155,20 +169,25 @@ export function SwipeNavigator({ children }: Props) {
     }
 
     const resetTransform = () => {
-      layer.style.transition = "transform 220ms ease-out"
+      layer.style.transition = "transform 150ms ease-out"
       layer.style.transform = "translate3d(0, 0, 0)"
       window.setTimeout(() => {
         if (layer) layer.style.transition = ""
-      }, 240)
+      }, 160)
     }
 
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0]
       if (!touch) return
       const target = touch.target as HTMLElement | null
-      if (target?.closest?.("[data-swipe-ignore], input[type='range'], .embla, [role='dialog'], [data-radix-dialog-content], button, a")) {
+      if (target?.closest?.("[data-swipe-ignore], input[type='range'], .embla, [role='dialog'], [data-radix-dialog-content], button, a, table, [data-scroll-x]")) {
         // Skip swipe if user is touching an interactive element or marked region.
         // Links and buttons are critical — tap shouldn't be intercepted.
+        return
+      }
+      // Also skip when the touch is inside any horizontally-scrollable container,
+      // so users can scroll wide tables/fields sideways without triggering nav.
+      if (hasHorizontalScroll(target)) {
         return
       }
 
@@ -235,8 +254,8 @@ export function SwipeNavigator({ children }: Props) {
       const velocity = Math.abs(dx) / Math.max(elapsed, 1)
       const width = widthRef.current || window.innerWidth
 
-      const passedThreshold = Math.abs(dx) > width * 0.5
-      const isFling = velocity > 0.5 && Math.abs(dx) > 50
+      const passedThreshold = Math.abs(dx) > width * 0.35
+      const isFling = velocity > 0.3 && Math.abs(dx) > 40
 
       let targetIdx = activeIdx
       if (passedThreshold || isFling) {

@@ -31,6 +31,7 @@ import {
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ModalPortal } from "@/components/ui/modal-portal"
 import { QuestionEditorModal } from "@/components/admin/QuestionEditorModal"
 
 type ToastState = {
@@ -803,6 +804,7 @@ export function ExamManagement({
       )}
 
       {showCreateModal ? (
+        <ModalPortal>
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
           <button
             type="button"
@@ -1207,9 +1209,11 @@ c) 100 Hz`}
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {deleteTargetExam ? (
+        <ModalPortal>
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
           <button
             type="button"
@@ -1266,9 +1270,11 @@ c) 100 Hz`}
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {editTargetExam ? (
+        <ModalPortal>
         <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
           <button
             type="button"
@@ -1510,9 +1516,11 @@ c) 100 Hz`}
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {rulesTargetExam ? (
+        <ModalPortal>
         <div className="fixed inset-0 z-[96] flex items-center justify-center p-4">
           <button
             type="button"
@@ -1628,6 +1636,7 @@ c) 100 Hz`}
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {questionEditorExam ? (
