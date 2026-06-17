@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import confetti from "canvas-confetti"
 
 type Question = {
   text: string
@@ -78,12 +77,19 @@ export function HeroQuiz() {
 
   useEffect(() => {
     if (!finished) return
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.7 },
-      colors: ["#3b82f6", "#8b5cf6", "#06b6d4", "#10b981"],
+    let cancelled = false
+    void import("canvas-confetti").then(({ default: confetti }) => {
+      if (cancelled) return
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.7 },
+        colors: ["#3b82f6", "#8b5cf6", "#06b6d4", "#10b981"],
+      })
     })
+    return () => {
+      cancelled = true
+    }
   }, [finished])
 
   useEffect(() => {

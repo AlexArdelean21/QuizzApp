@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { ChevronDown } from "lucide-react"
@@ -15,13 +16,15 @@ import {
   updateLearningStatus,
 } from "@/lib/quiz/fetch-random-intrebari"
 import { areAnswerSetsEqual, type ExamSummary, type PracticeSource, type QuizQuestion } from "@/lib/quiz/types"
-import { QuizHeader } from "./quiz-header"
-import { QuestionCard } from "./question-card"
-import { AnswerOptions } from "./answer-options"
-import { QuizNavigation } from "./quiz-navigation"
-import { QuizResults } from "./quiz-results"
-import { MistakeReview, type MistakeEntry } from "./mistake-review"
+import type { MistakeEntry } from "./mistake-review"
 import { ExamSelector } from "@/components/statistici/exam-selector"
+
+const QuizResults = dynamic(() => import("./quiz-results").then((m) => m.QuizResults))
+const MistakeReview = dynamic(() => import("./mistake-review").then((m) => m.MistakeReview))
+const QuizHeader = dynamic(() => import("./quiz-header").then((m) => m.QuizHeader))
+const QuestionCard = dynamic(() => import("./question-card").then((m) => m.QuestionCard))
+const AnswerOptions = dynamic(() => import("./answer-options").then((m) => m.AnswerOptions))
+const QuizNavigation = dynamic(() => import("./quiz-navigation").then((m) => m.QuizNavigation))
 
 const FALLBACK_DURATION_SEC = 30 * 60
 const FALLBACK_QUESTION_COUNT = 25

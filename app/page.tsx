@@ -1,5 +1,6 @@
 import { QuizInterface } from "@/components/quiz/quiz-interface-v2"
 import { Homepage } from "@/components/homepage/Homepage"
+import { AppChrome } from "@/components/app-chrome"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getPublicStats } from "@/lib/public-stats"
 
@@ -12,7 +13,11 @@ export default async function Page() {
   } = await supabase.auth.getUser()
 
   if (user) {
-    return <QuizInterface />
+    return (
+      <AppChrome>
+        <QuizInterface />
+      </AppChrome>
+    )
   }
 
   const stats = await getPublicStats()
