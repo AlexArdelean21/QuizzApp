@@ -753,6 +753,7 @@ export function QuizInterface() {
             isBookmarked={bookmarkedQuestions.has(currentQuestion.id)}
             onToggleBookmark={handleToggleBookmark}
             isMultipleChoice={isMultipleChoice}
+            imageUrl={currentQuestion.imageUrl ?? null}
           />
           <AnswerOptions
             options={currentQuestion.options}

@@ -114,6 +114,7 @@ export function mapIntrebareRowToQuestion(row: IntrebareRow): QuizQuestion | nul
     text: String(row.intrebare_text ?? "").trim(),
     correctAnswers,
     options: shuffleOptions(options),
+    imageUrl: row.image_url ? String(row.image_url) : null,
   }
 }
 
@@ -195,7 +196,7 @@ export async function fetchNewQuestions(
   const rows = await fetchNewIntrebariRows(supabase, userId, examenId)
   const mapped = rows
     .map(mapIntrebareRowToQuestion)
-    .filter((item): item is QuizQuestion => Boolean(item && item.text))
+    .filter((item): item is QuizQuestion => Boolean(item && (item.text || item.imageUrl)))
   if (typeof count !== "number" || count <= 0) {
     shuffleInPlace(mapped)
     return mapped
@@ -249,7 +250,7 @@ export async function fetchQuestionsBySource(
     if (error) throw new Error(error.message)
     const mapped = ((data ?? []) as IntrebareRow[])
       .map(mapIntrebareRowToQuestion)
-      .filter((item): item is QuizQuestion => Boolean(item && item.text))
+      .filter((item): item is QuizQuestion => Boolean(item && (item.text || item.imageUrl)))
     return shuffleInPlaceAndLimit(mapped, count)
   }
 
@@ -269,7 +270,7 @@ export async function fetchQuestionsBySource(
   if (error) throw new Error(error.message)
   const mapped = ((data ?? []) as IntrebareRow[])
     .map(mapIntrebareRowToQuestion)
-    .filter((item): item is QuizQuestion => Boolean(item && item.text))
+    .filter((item): item is QuizQuestion => Boolean(item && (item.text || item.imageUrl)))
   return shuffleInPlaceAndLimit(mapped, count)
 }
 
@@ -574,7 +575,7 @@ export async function fetchRandomIntrebari(
 
   for (const row of rows) {
     const q = mapIntrebareRowToQuestion(row)
-    if (q && q.text) questions.push(q)
+    if (q && (q.text || q.imageUrl)) questions.push(q)
   }
 
   return shuffleInPlaceAndLimit(questions, count)

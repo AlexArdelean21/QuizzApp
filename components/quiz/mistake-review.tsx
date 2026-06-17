@@ -96,6 +96,17 @@ function MistakeCard({ entry, number }: { entry: MistakeEntry; number: number })
         {question.text}
       </p>
 
+      {question.imageUrl && (
+        <div className="mt-3">
+          <img
+            src={question.imageUrl}
+            alt="Imagine pentru întrebarea greșită"
+            loading="lazy"
+            className="max-h-48 w-full rounded-xl border border-border/60 bg-muted/30 object-contain"
+          />
+        </div>
+      )}
+
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Răspunsul tău</p>

@@ -20,6 +20,8 @@ export type QuizQuestion = {
   options: QuizOption[]
   /** Sorted list of every correct option id for this question. */
   correctAnswers: AnswerId[]
+  /** URL public imagine atașată întrebării. Null = fără imagine. */
+  imageUrl?: string | null
 }
 
 /**
@@ -38,6 +40,7 @@ export type IntrebareRow = {
   raspuns_corect?: string | null
   variante?: unknown
   raspunsuri_corecte?: unknown
+  image_url?: string | null
 }
 
 export type PracticeSource = "all" | "bookmarked" | "wrong" | "new"

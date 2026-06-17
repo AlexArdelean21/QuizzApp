@@ -182,6 +182,8 @@ export type AdminQuestionRow = {
   variante: string[]
   /** Lower-case option ids that are correct (length >= 1). */
   raspunsuri_corecte: string[]
+  /** URL public imagine atașată întrebării. Null = fără imagine. */
+  image_url: string | null
 }
 
 export type AdminExamRow = {
@@ -225,6 +227,8 @@ type UpdateSingleQuestionPayload = {
   intrebare_text: string
   variante: string[]
   raspunsuri_corecte: string[]
+  /** undefined = nu schimba, null = șterge imaginea, string = noua imagine. */
+  image_url?: string | null
 }
 
 export async function updateUserActivity() {
@@ -778,7 +782,7 @@ export async function getQuestionsForExam(examId: number): Promise<AdminQuestion
   const { data, error } = await adminSupabase
     .from("intrebari")
     .select(
-      "id, intrebare_text, variante, raspunsuri_corecte, varianta_a, varianta_b, varianta_c, raspuns_corect"
+      "id, intrebare_text, variante, raspunsuri_corecte, varianta_a, varianta_b, varianta_c, raspuns_corect, image_url"
     )
     .eq("examen_id", examId)
     .order("id", { ascending: true })
@@ -807,6 +811,7 @@ export async function getQuestionsForExam(examId: number): Promise<AdminQuestion
         intrebare_text: String(row.intrebare_text ?? ""),
         variante,
         raspunsuri_corecte,
+        image_url: row.image_url ? String(row.image_url) : null,
       }
     })
     .filter((row): row is AdminQuestionRow => row !== null)
@@ -838,8 +843,11 @@ export async function updateSingleQuestion(id: number, data: UpdateSingleQuestio
         .slice(0, MAX_QUIZ_VARIANTS)
     : []
 
-  if (!intrebareText || variante.length < MIN_QUIZ_VARIANTS) {
-    throw new Error("Întrebarea trebuie să aibă text și minim 2 variante completate.")
+  // A question is valid with either text or an attached image (or both).
+  const hasImage =
+    typeof data.image_url === "string" && data.image_url.trim().length > 0
+  if ((!intrebareText && !hasImage) || variante.length < MIN_QUIZ_VARIANTS) {
+    throw new Error("Întrebarea trebuie să aibă text sau imagine și minim 2 variante completate.")
   }
 
   const allowedIds = new Set<string>(OPTION_IDS.slice(0, variante.length))
@@ -867,6 +875,11 @@ export async function updateSingleQuestion(id: number, data: UpdateSingleQuestio
     varianta_b: variante[1] ?? "",
     varianta_c: variante[2] ?? "",
     raspuns_corect: raspunsuri[0],
+  }
+
+  // undefined = nu schimba, null = șterge imaginea, string = noua imagine.
+  if (data.image_url !== undefined) {
+    update.image_url = data.image_url
   }
 
   const { error } = await adminSupabase.from("intrebari").update(update).eq("id", id)

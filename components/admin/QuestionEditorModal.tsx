@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react"
 import { Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react"
 import {
   deleteSingleQuestion,
@@ -10,12 +10,16 @@ import {
 } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
 import { ModalPortal } from "@/components/ui/modal-portal"
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import {
   MAX_QUIZ_VARIANTS,
   MIN_QUIZ_VARIANTS,
   OPTION_IDS,
   OPTION_LABELS,
 } from "@/lib/quiz/types"
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
 
 type QuestionEditorModalProps = {
   examId: number
@@ -28,6 +32,7 @@ type QuestionDraft = {
   intrebare_text: string
   variante: string[]
   raspunsuri_corecte: string[]
+  image_url: string | null
 }
 
 const normalizeText = (text: string) =>
@@ -43,6 +48,7 @@ function toDraft(question: AdminQuestionRow): QuestionDraft {
     intrebare_text: question.intrebare_text,
     variante: [...question.variante],
     raspunsuri_corecte: [...question.raspunsuri_corecte],
+    image_url: question.image_url ?? null,
   }
 }
 
@@ -68,6 +74,9 @@ export function QuestionEditorModal({
   const [loading, startLoadingTransition] = useTransition()
   const [saving, startSavingTransition] = useTransition()
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageUploading, setImageUploading] = useState(false)
 
   useEffect(() => {
     startLoadingTransition(() => {
@@ -103,6 +112,31 @@ export function QuestionEditorModal({
   const openEditMode = (question: AdminQuestionRow) => {
     setEditingId(question.id)
     setDraft(toDraft(question))
+    setImageFile(null)
+    setImagePreview(question.image_url ?? null)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setDraft(null)
+    setImageFile(null)
+    setImagePreview(null)
+  }
+
+  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      setError("Tip de fișier neacceptat. Folosește JPEG, PNG, WebP sau GIF.")
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("Imaginea depășește limita de 5MB.")
+      return
+    }
+    setError(null)
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
   }
 
   const updateVariantText = (index: number, value: string) => {
@@ -181,10 +215,37 @@ export function QuestionEditorModal({
       void (async () => {
         try {
           setError(null)
+
+          // Resolve the image URL to persist:
+          //   - new file selected → upload, use the public URL
+          //   - preview cleared   → null (deletes the existing image)
+          //   - otherwise         → keep whatever preview holds (original URL)
+          let imageUrlToSave: string | null = imagePreview
+          if (imageFile) {
+            setImageUploading(true)
+            const supabase = getSupabaseBrowserClient()
+            const ext = imageFile.name.split(".").pop() ?? "jpg"
+            const path = `${examId}/${questionId}/${Date.now()}.${ext}`
+            const { error: uploadError } = await supabase.storage
+              .from("question-images")
+              .upload(path, imageFile, { upsert: true })
+            if (uploadError) {
+              setImageUploading(false)
+              setError(`Nu s-a putut încărca imaginea: ${uploadError.message}`)
+              return
+            }
+            const { data: urlData } = supabase.storage
+              .from("question-images")
+              .getPublicUrl(path)
+            imageUrlToSave = urlData.publicUrl
+            setImageUploading(false)
+          }
+
           await updateSingleQuestion(questionId, {
             intrebare_text: cleaned.intrebare_text,
             variante: trimmedVariants,
             raspunsuri_corecte: cleaned.raspunsuri_corecte,
+            image_url: imageUrlToSave,
           })
 
           setQuestions((current) =>
@@ -195,14 +256,15 @@ export function QuestionEditorModal({
                     intrebare_text: cleaned.intrebare_text,
                     variante: trimmedVariants,
                     raspunsuri_corecte: [...cleaned.raspunsuri_corecte],
+                    image_url: imageUrlToSave,
                   }
                 : question
             )
           )
-          setEditingId(null)
-          setDraft(null)
+          cancelEdit()
           onRefresh()
         } catch (saveError) {
+          setImageUploading(false)
           setError(saveError instanceof Error ? saveError.message : "Nu s-a putut salva întrebarea.")
         }
       })()
@@ -220,8 +282,7 @@ export function QuestionEditorModal({
         await deleteSingleQuestion(questionId)
         setQuestions((current) => current.filter((question) => question.id !== questionId))
         if (editingId === questionId) {
-          setEditingId(null)
-          setDraft(null)
+          cancelEdit()
         }
         onRefresh()
       } catch (deleteError) {
@@ -316,20 +377,17 @@ export function QuestionEditorModal({
                               type="button"
                               size="sm"
                               onClick={() => handleSave(question.id)}
-                              disabled={saving || isDeleting}
+                              disabled={saving || isDeleting || imageUploading}
                             >
                               <Save className="mr-1 size-3.5" />
-                              {saving ? "Salvare..." : "Save"}
+                              {imageUploading ? "Încărcare..." : saving ? "Salvare..." : "Save"}
                             </Button>
                             <Button
                               type="button"
                               size="sm"
                               variant="ghost"
-                              onClick={() => {
-                                setEditingId(null)
-                                setDraft(null)
-                              }}
-                              disabled={saving || isDeleting}
+                              onClick={cancelEdit}
+                              disabled={saving || isDeleting || imageUploading}
                             >
                               <X className="mr-1 size-3.5" />
                               Anulează
@@ -369,6 +427,62 @@ export function QuestionEditorModal({
                           </p>
                         )}
                       </label>
+
+                      {isEditing && draft ? (
+                        <div className="mt-1 space-y-2 md:col-span-2">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Imagine (opțional)
+                          </label>
+
+                          {imagePreview && (
+                            <div className="relative w-full overflow-hidden rounded-xl border border-border/60 bg-muted/30">
+                              <img
+                                src={imagePreview}
+                                alt="Preview imagine"
+                                className="max-h-48 w-full object-contain"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setImageFile(null)
+                                  setImagePreview(null)
+                                }}
+                                className="absolute right-2 top-2 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
+                                aria-label="Șterge imagine"
+                              >
+                                <svg
+                                  className="size-4"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <path d="M18 6 6 18M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            onChange={handleImageChange}
+                            className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary hover:file:bg-primary/20"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Max 5MB · JPEG, PNG, WebP · Click pe imagine pentru a o schimba
+                          </p>
+                        </div>
+                      ) : question.image_url ? (
+                        <div className="md:col-span-2">
+                          <img
+                            src={question.image_url}
+                            alt="Imagine atașată întrebării"
+                            loading="lazy"
+                            className="max-h-40 w-full rounded-lg border border-border/60 bg-muted/30 object-contain"
+                          />
+                        </div>
+                      ) : null}
 
                       {isEditing && draft ? (
                         <div className="md:col-span-2">
