@@ -155,10 +155,16 @@ export function Homepage({ stats }: { stats: PublicStats }) {
           <div className="text-sm text-muted-foreground">
             © {new Date().getFullYear()} QuizHub — toate drepturile rezervate
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
             <Link href="/login" className="transition hover:text-foreground">Login</Link>
             <span>·</span>
             <Link href="/docs" className="transition hover:text-foreground">Documentație</Link>
+            <span>·</span>
+            <Link href="/legal/confidentialitate" className="transition hover:text-foreground">Politică de confidențialitate</Link>
+            <span>·</span>
+            <Link href="/legal/termeni" className="transition hover:text-foreground">Termeni și condiții</Link>
+            <span>·</span>
+            <Link href="/legal/cookies" className="transition hover:text-foreground">Politica de cookie-uri</Link>
             <span>·</span>
             <a href="mailto:contact@quizhub.ro" className="transition hover:text-foreground">Contact</a>
           </div>

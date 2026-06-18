@@ -339,6 +339,12 @@ c) 100 Hz`}</pre>
           © {new Date().getFullYear()} QuizHub ·{" "}
           <Link href="/" className="transition hover:text-foreground">Acasă</Link>
           {" · "}
+          <Link href="/legal/confidentialitate" className="transition hover:text-foreground">Confidențialitate</Link>
+          {" · "}
+          <Link href="/legal/termeni" className="transition hover:text-foreground">Termeni</Link>
+          {" · "}
+          <Link href="/legal/cookies" className="transition hover:text-foreground">Cookie-uri</Link>
+          {" · "}
           <a href="mailto:contact@quizhub.ro" className="transition hover:text-foreground">Contact</a>
         </div>
       </footer>
