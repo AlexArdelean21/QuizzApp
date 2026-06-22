@@ -1,20 +1,25 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, Suspense, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
 type AuthMode = "login" | "signup"
 
-export default function LoginPage() {
-  const [mode, setMode] = useState<AuthMode>(() => {
-    if (typeof window === "undefined") return "login"
-    return new URLSearchParams(window.location.search).get("tab") === "signup"
-      ? "signup"
-      : "login"
-  })
+function LoginForm() {
+  const searchParams = useSearchParams()
+  const [mode, setMode] = useState<AuthMode>("login")
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "signup") {
+      setMode("signup")
+    }
+  }, [searchParams])
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
@@ -26,6 +31,8 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [signupDone, setSignupDone] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
 
   const clearFeedback = () => {
     setMessage(null)
@@ -72,7 +79,7 @@ export default function LoginPage() {
       }
 
       const supabase = getSupabaseBrowserClient()
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
       })
@@ -80,6 +87,24 @@ export default function LoginPage() {
       if (error) {
         setErrorMessage(error.message)
         return
+      }
+
+      if (data.user) {
+        try {
+          const res = await fetch("/api/legal/record-signup-consent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: data.user.id,
+              userAgent: navigator.userAgent,
+            }),
+          })
+          if (!res.ok) {
+            console.error("[signup] Consent recording failed:", await res.text())
+          }
+        } catch (consentErr) {
+          console.error("[signup] Consent recording error:", consentErr)
+        }
       }
 
       setSignupDone(true)
@@ -296,6 +321,48 @@ export default function LoginPage() {
                 </div>
               )}
 
+              {mode === "signup" && (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="accept-terms"
+                      checked={acceptedTerms}
+                      onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="accept-terms" className="text-sm leading-tight text-muted-foreground cursor-pointer">
+                      Sunt de acord cu{" "}
+                      <Link
+                        href="/legal/termeni"
+                        target="_blank"
+                        className="underline underline-offset-4 text-foreground"
+                      >
+                        Termenii și condițiile
+                      </Link>
+                    </label>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="accept-privacy"
+                      checked={acceptedPrivacy}
+                      onCheckedChange={(checked) => setAcceptedPrivacy(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="accept-privacy" className="text-sm leading-tight text-muted-foreground cursor-pointer">
+                      Am citit și sunt de acord cu{" "}
+                      <Link
+                        href="/legal/confidentialitate"
+                        target="_blank"
+                        className="underline underline-offset-4 text-foreground"
+                      >
+                        Politica de confidențialitate
+                      </Link>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {errorMessage && (
                 <p className="rounded-md bg-rose-500/10 px-3 py-2 text-sm text-rose-600 dark:text-rose-400">
                   {errorMessage}
@@ -309,7 +376,11 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                disabled={isSubmitting || loginSuccess}
+                disabled={
+                  isSubmitting ||
+                  loginSuccess ||
+                  (mode === "signup" && (!acceptedTerms || !acceptedPrivacy))
+                }
                 className={cn(
                   "btn-primary w-full py-3.5 text-base disabled:opacity-60",
                   loginSuccess && "button-success"
@@ -356,5 +427,13 @@ export default function LoginPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }

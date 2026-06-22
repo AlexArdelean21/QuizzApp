@@ -21,7 +21,7 @@ export function Homepage({ stats }: { stats: PublicStats }) {
               href="/login"
               className="rounded-lg px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted sm:px-4"
             >
-              Login
+              Conectare
             </Link>
             <Link
               href="/login?tab=signup"
@@ -156,7 +156,7 @@ export function Homepage({ stats }: { stats: PublicStats }) {
             © {new Date().getFullYear()} QuizHub — toate drepturile rezervate
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-            <Link href="/login" className="transition hover:text-foreground">Login</Link>
+            <Link href="/login" className="transition hover:text-foreground">Conectare</Link>
             <span>·</span>
             <Link href="/docs" className="transition hover:text-foreground">Documentație</Link>
             <span>·</span>

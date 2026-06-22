@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Analytics } from "@vercel/analytics/next"
+import { CookieConsentProvider } from "@/components/legal/CookieConsentContext";
+import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
+import { GatedAnalytics } from "@/components/legal/GatedAnalytics";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -47,9 +49,12 @@ export default function RootLayout({
           aria-hidden
           className="pointer-events-none fixed inset-0 -z-20 bg-mesh"
         />
-        {children}
+        <CookieConsentProvider>
+          {children}
+          <CookieConsentBanner />
+          <GatedAnalytics />
+        </CookieConsentProvider>
         <SpeedInsights />
-        <Analytics />
       </body>
     </html>
   );
