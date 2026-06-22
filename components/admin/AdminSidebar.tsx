@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { ReactNode, useEffect, useState } from "react"
+import { ReConsentModal } from "@/components/legal/ReConsentModal"
 import { createPortal } from "react-dom"
 import { usePathname } from "next/navigation"
 import {
@@ -483,6 +484,7 @@ export function AdminLayoutShell({
         <SwipeNavigator>{children}</SwipeNavigator>
       </main>
       <AdminBottomTabBar isSuperAdmin={isSuperAdmin} />
+      <ReConsentModal />
     </div>
   )
 }
