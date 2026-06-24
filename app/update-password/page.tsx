@@ -44,8 +44,8 @@ export default function UpdatePasswordPage() {
         return
       }
 
-      setMessage("Parola a fost actualizată cu succes!")
-      setTimeout(() => router.push("/"), 1500)
+      setMessage("Parola a fost actualizată cu succes! Te redirecționăm...")
+      setTimeout(() => router.push("/login?reset=true"), 1500)
     } catch (err) {
       setErrorMessage(
         err instanceof Error ? err.message : "A apărut o eroare neașteptată."

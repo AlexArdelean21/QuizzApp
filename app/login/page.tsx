@@ -19,6 +19,12 @@ function LoginForm() {
     if (searchParams.get("tab") === "signup") {
       setMode("signup")
     }
+    if (searchParams.get("confirmed") === "true") {
+      setMessage("Cont confirmat cu succes! Te poți autentifica acum.")
+    }
+    if (searchParams.get("reset") === "true") {
+      setMessage("Parola a fost actualizată cu succes! Te poți autentifica cu noua parolă.")
+    }
   }, [searchParams])
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -79,9 +85,11 @@ function LoginForm() {
       }
 
       const supabase = getSupabaseBrowserClient()
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/login?confirmed=true")}`
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: { emailRedirectTo: redirectTo },
       })
 
       if (error) {
